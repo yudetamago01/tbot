@@ -99,6 +99,7 @@ test("OAuth callback rejects a mismatched state without contacting Karotter", as
   const session = new OAuthSession({
     clientId: "client-id",
     redirectUri: "https://tbot.example/oauth/callback",
+    stateSecret: "state-secret",
     fetchImpl: async () => {
       requested = true;
       return tokenResponse({});
@@ -110,4 +111,32 @@ test("OAuth callback rejects a mismatched state without contacting Karotter", as
     OAuthAuthorizationRequiredError,
   );
   assert.equal(requested, false);
+});
+
+test("OAuth callback survives a server restart and concurrent authorization starts", async () => {
+  const { directory, tokenPath } = await temporaryTokenPath();
+  const stateSecret = "stable-render-secret";
+  const firstProcess = new OAuthSession({
+    clientId: "client-id",
+    redirectUri: "https://tbot.example/oauth/callback",
+    stateSecret,
+    tokenPath,
+  });
+  const firstAuthorization = new URL(firstProcess.createAuthorizationUrl());
+  firstProcess.createAuthorizationUrl();
+
+  const restartedProcess = new OAuthSession({
+    clientId: "client-id",
+    redirectUri: "https://tbot.example/oauth/callback",
+    stateSecret,
+    tokenPath,
+    fetchImpl: async () => tokenResponse({ access_token: "access-after-restart", expires_in: 3600 }),
+  });
+
+  await restartedProcess.completeAuthorization({
+    code: "authorization-code",
+    state: firstAuthorization.searchParams.get("state"),
+  });
+  assert.equal(await restartedProcess.getAccessToken(), "access-after-restart");
+  await rm(directory, { recursive: true, force: true });
 });

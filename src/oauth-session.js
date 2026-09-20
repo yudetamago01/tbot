@@ -1,4 +1,10 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -14,6 +20,10 @@ export class OAuthAuthorizationRequiredError extends Error {
 
 function base64UrlSha256(value) {
   return createHash("sha256").update(value).digest("base64url");
+}
+
+function stateEncryptionKey(secret) {
+  return createHash("sha256").update(`tbot-oauth-state\0${secret}`).digest();
 }
 
 function safeEqual(left, right) {
@@ -45,6 +55,7 @@ export class OAuthSession {
     baseUrl = "https://karotter.com/api/oauth",
     tokenPath = "./data/oauth.json",
     initialRefreshToken,
+    stateSecret,
     timeoutMs = 15_000,
     fetchImpl = fetch,
     log,
@@ -56,11 +67,11 @@ export class OAuthSession {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.tokenPath = path.resolve(tokenPath);
     this.initialRefreshToken = initialRefreshToken;
+    this.stateSecret = stateSecret || clientSecret;
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.log = log;
     this.loaded = false;
-    this.pending = null;
     this.refreshPromise = null;
     this.tokens = {
       accessToken: null,
@@ -109,9 +120,11 @@ export class OAuthSession {
     if (!this.isConfigured()) {
       throw new OAuthAuthorizationRequiredError("OAuth client ID and redirect URI are not configured");
     }
+    if (!this.stateSecret) {
+      throw new OAuthAuthorizationRequiredError("OAuth state secret is not configured");
+    }
     const verifier = randomBytes(48).toString("base64url");
-    const state = randomBytes(32).toString("base64url");
-    this.pending = { verifier, state, createdAt: Date.now() };
+    const state = this.createState({ verifier, createdAt: Date.now() });
     const url = new URL(`${this.baseUrl}/authorize`);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", this.clientId);
@@ -125,9 +138,8 @@ export class OAuthSession {
 
   async completeAuthorization({ code, state, error }) {
     if (error) throw new OAuthAuthorizationRequiredError(`Karotter authorization failed: ${error}`);
-    const pending = this.pending;
-    this.pending = null;
-    if (!pending || !safeEqual(state, pending.state)) {
+    const pending = this.readState(state);
+    if (!pending) {
       throw new OAuthAuthorizationRequiredError("OAuth state did not match; start authorization again");
     }
     if (Date.now() - pending.createdAt > PENDING_AUTH_TTL_MS) {
@@ -142,6 +154,40 @@ export class OAuthSession {
       client_secret: this.clientSecret || undefined,
       code_verifier: pending.verifier,
     });
+  }
+
+  createState(payload) {
+    const initializationVector = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", stateEncryptionKey(this.stateSecret), initializationVector);
+    const encrypted = Buffer.concat([
+      cipher.update(JSON.stringify({ version: 1, ...payload }), "utf8"),
+      cipher.final(),
+    ]);
+    return Buffer.concat([initializationVector, cipher.getAuthTag(), encrypted]).toString("base64url");
+  }
+
+  readState(value) {
+    if (!value || !this.stateSecret) return null;
+    try {
+      const sealed = Buffer.from(String(value), "base64url");
+      if (sealed.length < 29) return null;
+      const initializationVector = sealed.subarray(0, 12);
+      const authenticationTag = sealed.subarray(12, 28);
+      const encrypted = sealed.subarray(28);
+      const decipher = createDecipheriv(
+        "aes-256-gcm",
+        stateEncryptionKey(this.stateSecret),
+        initializationVector,
+      );
+      decipher.setAuthTag(authenticationTag);
+      const parsed = JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8"));
+      if (parsed?.version !== 1 || typeof parsed.verifier !== "string" || !Number.isFinite(parsed.createdAt)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
   }
 
   async getAccessToken() {

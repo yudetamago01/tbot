@@ -12,6 +12,7 @@ const oauthSession = config.authMode === "oauth"
   ? new OAuthSession({
       ...config.oauth,
       initialRefreshToken: config.oauth.refreshToken,
+      stateSecret: config.oauth.setupSecret,
       timeoutMs: config.httpTimeoutMs,
       log: logger,
     })
