@@ -10,6 +10,7 @@ import path from "node:path";
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1_000;
 const LEGACY_OAUTH_BASE_URL = "https://karotter.com/api/oauth";
 const OAUTH_BASE_URL = "https://api.karotter.com/api/oauth";
+const ACCOUNT_API_BASE_URL = "https://api.karotter.com/api";
 
 export class OAuthAuthorizationRequiredError extends Error {
   constructor(message = "Karotter OAuth authorization is required") {
@@ -36,6 +37,18 @@ function safeEqual(left, right) {
 function normalizeOAuthBaseUrl(value) {
   const normalized = String(value || OAUTH_BASE_URL).trim().replace(/\/+$/, "");
   return normalized === LEGACY_OAUTH_BASE_URL ? OAUTH_BASE_URL : normalized;
+}
+
+function accessTokenExpiresAt(token, expiresIn) {
+  const duration = Number(expiresIn);
+  if (Number.isFinite(duration) && duration > 0) return Date.now() + duration * 1_000;
+  try {
+    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
+    if (Number.isFinite(payload?.exp)) return payload.exp * 1_000;
+  } catch {
+    // Karotter may return an opaque access token instead of a JWT.
+  }
+  return Date.now() + 15 * 60 * 1_000;
 }
 
 export function verifySetupAuthorization(header, setupSecret) {
@@ -65,6 +78,7 @@ export class OAuthSession {
     tokenPath = "./data/oauth.json",
     initialRefreshToken,
     stateSecret,
+    accountBaseUrl = ACCOUNT_API_BASE_URL,
     timeoutMs = 15_000,
     fetchImpl = fetch,
     log,
@@ -77,6 +91,7 @@ export class OAuthSession {
     this.tokenPath = path.resolve(tokenPath);
     this.initialRefreshToken = initialRefreshToken;
     this.stateSecret = stateSecret || clientSecret;
+    this.accountBaseUrl = String(accountBaseUrl || ACCOUNT_API_BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.log = log;
@@ -87,6 +102,8 @@ export class OAuthSession {
       refreshToken: null,
       expiresAt: 0,
       scope: null,
+      provider: "oauth",
+      deviceId: randomBytes(16).toString("hex"),
     };
   }
 
@@ -104,6 +121,8 @@ export class OAuthSession {
         refreshToken: parsed?.refreshToken || null,
         expiresAt: Number(parsed?.expiresAt) || 0,
         scope: parsed?.scope || null,
+        provider: parsed?.provider === "account" ? "account" : "oauth",
+        deviceId: parsed?.deviceId || this.tokens.deviceId,
       };
     } catch (error) {
       if (error?.code !== "ENOENT") {
@@ -117,8 +136,8 @@ export class OAuthSession {
 
   status() {
     return {
-      mode: "oauth",
-      configured: this.isConfigured(),
+      mode: this.tokens.provider === "account" ? "account" : "oauth",
+      configured: this.isConfigured() || Boolean(this.stateSecret),
       authorized: Boolean(this.tokens.accessToken || this.tokens.refreshToken),
       expiresAt: this.tokens.expiresAt ? new Date(this.tokens.expiresAt).toISOString() : null,
       scope: this.tokens.scope,
@@ -200,12 +219,15 @@ export class OAuthSession {
     }
     if (!this.tokens.refreshToken) throw new OAuthAuthorizationRequiredError();
     if (!this.refreshPromise) {
-      this.refreshPromise = this.exchangeToken({
-        grant_type: "refresh_token",
-        refresh_token: this.tokens.refreshToken,
-        client_id: this.clientId,
-        client_secret: this.clientSecret || undefined,
-      }).finally(() => {
+      this.refreshPromise = (this.tokens.provider === "account"
+        ? this.refreshAccountToken()
+        : this.exchangeToken({
+            grant_type: "refresh_token",
+            refresh_token: this.tokens.refreshToken,
+            client_id: this.clientId,
+            client_secret: this.clientSecret || undefined,
+          })
+      ).finally(() => {
         this.refreshPromise = null;
       });
     }
@@ -240,12 +262,104 @@ export class OAuthSession {
         refreshToken: body.refresh_token || this.tokens.refreshToken,
         expiresAt: Date.now() + expiresIn * 1_000,
         scope: body.scope || this.tokens.scope || this.scope,
+        provider: "oauth",
+        deviceId: this.tokens.deviceId,
       };
       await this.save();
       return this.tokens;
     } catch (error) {
       if (error?.name === "AbortError") {
         throw new OAuthAuthorizationRequiredError("Karotter OAuth token request timed out");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async loginWithPassword({ identifier, password }) {
+    if (!String(identifier || "").trim() || !String(password || "")) {
+      throw new OAuthAuthorizationRequiredError("Karotter ID and password are required");
+    }
+    const body = await this.accountRequest("/auth/login", {
+      identifier: String(identifier).trim(),
+      password: String(password),
+      deviceId: this.tokens.deviceId,
+      clientType: "web",
+      deviceName: "tbot on Render",
+    });
+    if (body?.twoFactorRequired && body?.twoFactorToken) {
+      return { twoFactorRequired: true, twoFactorToken: body.twoFactorToken };
+    }
+    await this.storeAccountTokens(body);
+    return { twoFactorRequired: false, user: body?.user || null };
+  }
+
+  async completeAccountTwoFactor({ twoFactorToken, code }) {
+    if (!twoFactorToken || !String(code || "").trim()) {
+      throw new OAuthAuthorizationRequiredError("Karotter two-factor authentication code is required");
+    }
+    const body = await this.accountRequest("/auth/login/2fa", {
+      twoFactorToken,
+      code: String(code).trim(),
+      deviceId: this.tokens.deviceId,
+      clientType: "web",
+      deviceName: "tbot on Render",
+    });
+    await this.storeAccountTokens(body);
+    return { user: body?.user || null };
+  }
+
+  async refreshAccountToken() {
+    const body = await this.accountRequest("/auth/refresh-token", {
+      refreshToken: this.tokens.refreshToken,
+      deviceId: this.tokens.deviceId,
+      clientType: "web",
+      deviceName: "tbot on Render",
+    });
+    await this.storeAccountTokens(body);
+    return this.tokens;
+  }
+
+  async storeAccountTokens(body) {
+    if (!body?.accessToken) {
+      throw new OAuthAuthorizationRequiredError("Karotter account login did not return an access token");
+    }
+    this.tokens = {
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken || this.tokens.refreshToken,
+      expiresAt: accessTokenExpiresAt(body.accessToken, body.expiresIn || body.expires_in),
+      scope: "account",
+      provider: "account",
+      deviceId: this.tokens.deviceId,
+    };
+    await this.save();
+  }
+
+  async accountRequest(pathname, payload) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(`${this.accountBaseUrl}${pathname}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-client-type": "web",
+          "x-device-id": this.tokens.deviceId,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new OAuthAuthorizationRequiredError(
+          body?.error || body?.message || `Karotter account login returned ${response.status}`,
+        );
+      }
+      return body;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new OAuthAuthorizationRequiredError("Karotter account login timed out");
       }
       throw error;
     } finally {

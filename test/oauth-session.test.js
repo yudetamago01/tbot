@@ -106,6 +106,67 @@ test("a refresh token from Render secrets renews an expired access token", async
   assert.equal(grantType, "refresh_token");
 });
 
+test("Karotter account login stores tokens without persisting credentials", async (context) => {
+  const { directory, tokenPath } = await temporaryTokenPath();
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  let request;
+  const session = new OAuthSession({
+    stateSecret: "setup-secret",
+    tokenPath,
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return tokenResponse({
+        user: { id: 1, username: "tbot" },
+        accessToken: "account-access-token",
+        refreshToken: "account-refresh-token",
+        expiresIn: 3600,
+      });
+    },
+  });
+
+  const result = await session.loginWithPassword({ identifier: "tbot", password: "secret-password" });
+  assert.equal(result.twoFactorRequired, false);
+  assert.equal(request.url, "https://api.karotter.com/api/auth/login");
+  assert.deepEqual(JSON.parse(request.options.body), {
+    identifier: "tbot",
+    password: "secret-password",
+    deviceId: session.tokens.deviceId,
+    clientType: "web",
+    deviceName: "tbot on Render",
+  });
+  assert.equal(await session.getAccessToken(), "account-access-token");
+  assert.equal(session.status().mode, "account");
+
+  const savedText = await readFile(tokenPath, "utf8");
+  assert.equal(savedText.includes("secret-password"), false);
+  assert.equal(savedText.includes('"identifier"'), false);
+});
+
+test("Karotter account two-factor login and refresh use the account API", async (context) => {
+  const { directory, tokenPath } = await temporaryTokenPath();
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const requests = [];
+  const session = new OAuthSession({
+    stateSecret: "setup-secret",
+    tokenPath,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, body: JSON.parse(options.body) });
+      if (url.endsWith("/auth/login")) return tokenResponse({ twoFactorRequired: true, twoFactorToken: "2fa-token" });
+      if (url.endsWith("/auth/login/2fa")) return tokenResponse({ accessToken: "short-token", refreshToken: "refresh-token", expiresIn: 1 });
+      return tokenResponse({ accessToken: "refreshed-account-token", refreshToken: "next-refresh-token", expiresIn: 3600 });
+    },
+  });
+
+  const first = await session.loginWithPassword({ identifier: "tbot", password: "password" });
+  assert.equal(first.twoFactorRequired, true);
+  await session.completeAccountTwoFactor({ twoFactorToken: first.twoFactorToken, code: "123456" });
+  assert.equal(await session.getAccessToken(), "refreshed-account-token");
+  assert.equal(requests[1].url, "https://api.karotter.com/api/auth/login/2fa");
+  assert.equal(requests[1].body.code, "123456");
+  assert.equal(requests[2].url, "https://api.karotter.com/api/auth/refresh-token");
+  assert.equal(requests[2].body.refreshToken, "refresh-token");
+});
+
 test("OAuth callback rejects a mismatched state without contacting Karotter", async () => {
   let requested = false;
   const session = new OAuthSession({

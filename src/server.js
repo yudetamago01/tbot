@@ -1,4 +1,5 @@
 import express from "express";
+import { randomBytes } from "node:crypto";
 import { BotService } from "./bot-service.js";
 import { loadConfig } from "./config.js";
 import { KarotterClient } from "./karotter-client.js";
@@ -37,6 +38,9 @@ const bot = new BotService({
 
 const app = express();
 app.disable("x-powered-by");
+app.use(express.urlencoded({ extended: false, limit: "8kb" }));
+
+const twoFactorChallenges = new Map();
 
 app.get("/", (_request, response) => {
   response.json({
@@ -51,11 +55,24 @@ app.get("/", (_request, response) => {
   });
 });
 
-function oauthPage(response, { success }) {
-  response
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function pageHeaders(response) {
+  return response
     .set("cache-control", "no-store")
     .set("referrer-policy", "no-referrer")
-    .set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'")
+    .set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+}
+
+function oauthPage(response, { success }) {
+  pageHeaders(response)
     .status(success ? 200 : 400)
     .send(`<!doctype html>
 <html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
@@ -65,16 +82,91 @@ function oauthPage(response, { success }) {
 <p>${success ? "tbotはOAuthアクセストークンで通知取得と画像返信を開始します。この画面は閉じて構いません。" : "認証を最初からやり直してください。継続して失敗する場合はRenderのOAuth設定を確認してください。"}</p></main></html>`);
 }
 
+function accountLoginPage(response, { error = "", twoFactorKey = "" } = {}) {
+  const csrf = oauthSession.createState();
+  const twoFactor = Boolean(twoFactorKey);
+  return pageHeaders(response).status(error ? 400 : 200).send(`<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>tbot Karotterログイン</title>
+<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:9vh auto;padding:0 1.25rem;color:#172033;background:#f5f7fb}main{background:#fff;border:1px solid #d8dee9;border-radius:18px;padding:2rem;box-shadow:0 12px 42px #17203312}h1{font-size:1.45rem;margin-top:0}p{line-height:1.7;color:#526174}.error{color:#b42318;background:#fff1f0;padding:.75rem 1rem;border-radius:10px}label{display:block;font-weight:650;margin:1rem 0 .4rem}input{box-sizing:border-box;width:100%;font:inherit;padding:.75rem .85rem;border:1px solid #bdc7d5;border-radius:10px}button{width:100%;margin-top:1.25rem;padding:.8rem;border:0;border-radius:10px;background:#6d49e7;color:#fff;font:inherit;font-weight:700;cursor:pointer}</style>
+<main><h1>${twoFactor ? "2段階認証" : "Karotterにログイン"}</h1>
+<p>${twoFactor ? "Karotterに表示された認証コードを入力してください。" : "tbotがKarotter APIへログインします。IDとパスワードはKarotterへの送信にだけ使用し、保存・ログ出力しません。"}</p>
+${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
+<form method="post" action="${twoFactor ? "/oauth/2fa" : "/oauth/login"}">
+<input type="hidden" name="csrf" value="${escapeHtml(csrf)}">
+${twoFactor
+    ? `<input type="hidden" name="challenge" value="${escapeHtml(twoFactorKey)}"><label for="code">認証コード</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="12">`
+    : `<label for="identifier">ユーザー名またはメールアドレス</label><input id="identifier" name="identifier" autocomplete="username" required maxlength="254"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">`}
+<button type="submit">${twoFactor ? "認証して接続" : "ログインして接続"}</button></form></main></html>`);
+}
+
+function requireSetup(request, response) {
+  if (verifySetupAuthorization(request.get("authorization"), config.oauth.setupSecret)) return true;
+  response.set("www-authenticate", 'Basic realm="tbot OAuth setup", charset="UTF-8"');
+  response.status(401).send("OAuth setup authentication is required");
+  return false;
+}
+
+function validFormState(value) {
+  const state = oauthSession.readState(value);
+  return Boolean(state && Date.now() - state.createdAt <= 10 * 60 * 1_000);
+}
+
 app.get("/oauth/start", (request, response) => {
   if (!oauthSession) return response.status(404).json({ error: "OAuth mode is disabled" });
-  if (!verifySetupAuthorization(request.get("authorization"), config.oauth.setupSecret)) {
-    response.set("www-authenticate", 'Basic realm="tbot OAuth setup", charset="UTF-8"');
-    return response.status(401).send("OAuth setup authentication is required");
-  }
+  if (!requireSetup(request, response)) return;
+  return accountLoginPage(response);
+});
+
+app.get("/oauth/authorize", (request, response) => {
+  if (!oauthSession) return response.status(404).json({ error: "OAuth mode is disabled" });
+  if (!requireSetup(request, response)) return;
   if (!oauthSession.isConfigured()) {
     return response.status(503).json({ error: "OAuth client ID and redirect URI are not configured" });
   }
   return response.redirect(302, oauthSession.createAuthorizationUrl());
+});
+
+app.post("/oauth/login", async (request, response) => {
+  if (!oauthSession) return response.status(404).json({ error: "OAuth mode is disabled" });
+  if (!requireSetup(request, response)) return;
+  if (!validFormState(request.body.csrf)) return accountLoginPage(response, { error: "画面の有効期限が切れました。もう一度入力してください。" });
+  try {
+    const result = await oauthSession.loginWithPassword({
+      identifier: request.body.identifier,
+      password: request.body.password,
+    });
+    request.body.password = "";
+    if (result.twoFactorRequired) {
+      const key = randomBytes(24).toString("base64url");
+      twoFactorChallenges.set(key, { token: result.twoFactorToken, createdAt: Date.now() });
+      return accountLoginPage(response, { twoFactorKey: key });
+    }
+    const connected = await bot.resumeAfterAuthentication();
+    return response.redirect(303, `/oauth/complete?status=${connected ? "ok" : "error"}`);
+  } catch (error) {
+    request.body.password = "";
+    logger.warn("karotter_account_login_failed", { error: error.message });
+    return accountLoginPage(response, { error: "KarotterのIDまたはパスワードを確認してください。" });
+  }
+});
+
+app.post("/oauth/2fa", async (request, response) => {
+  if (!oauthSession) return response.status(404).json({ error: "OAuth mode is disabled" });
+  if (!requireSetup(request, response)) return;
+  const challenge = twoFactorChallenges.get(String(request.body.challenge || ""));
+  if (!validFormState(request.body.csrf) || !challenge || Date.now() - challenge.createdAt > 10 * 60 * 1_000) {
+    return accountLoginPage(response, { error: "認証の有効期限が切れました。最初からやり直してください。" });
+  }
+  try {
+    await oauthSession.completeAccountTwoFactor({ twoFactorToken: challenge.token, code: request.body.code });
+    twoFactorChallenges.delete(String(request.body.challenge));
+    const connected = await bot.resumeAfterAuthentication();
+    return response.redirect(303, `/oauth/complete?status=${connected ? "ok" : "error"}`);
+  } catch (error) {
+    logger.warn("karotter_account_2fa_failed", { error: error.message });
+    return accountLoginPage(response, { twoFactorKey: String(request.body.challenge), error: "認証コードを確認してください。" });
+  }
 });
 
 app.get("/oauth/callback", async (request, response) => {

@@ -12,7 +12,7 @@ Karotterの投稿中に書かれた`@tbot コマンド`を検出し、本文を�
 
 公式の[Karotter Developer API](https://karotter.com/api-docs)を使用します。
 
-- 認証: OAuth 2認可コードフロー（PKCE）で取得した`Authorization: Bearer`トークン
+- 認証: Karotterアカウントログインで取得した`Authorization: Bearer`トークン。OAuth同意画面は互換用として残しています
 - 必要スコープ: `canReadPosts`, `canCreatePosts`
 - 通知取得: `GET /api/developer/notifications?type=MENTION,REPLY`
 - 投稿取得: `GET /api/developer/posts/:postId`
@@ -39,12 +39,12 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 
 ## Render
 
-1. Karotterの設定画面でOAuthアプリを作成し、`canReadPosts`と`canCreatePosts`を付与します。リダイレクトURIは`https://<Renderのサービス名>.onrender.com/oauth/callback`と完全一致させます。
+1. Karotterでtbot用アカウントを作成し、ユーザー名を`tbot`にします。
 2. このリポジトリからRender Blueprintを作成します。
-3. `KAROTTER_OAUTH_CLIENT_ID`、`KAROTTER_OAUTH_CLIENT_SECRET`、`KAROTTER_OAUTH_REDIRECT_URI`をRenderのSecret環境変数へ設定します。
+3. 互換用OAuthを使う場合のみ、`KAROTTER_OAUTH_CLIENT_ID`、`KAROTTER_OAUTH_CLIENT_SECRET`、`KAROTTER_OAUTH_REDIRECT_URI`をRenderのSecret環境変数へ設定します。
 4. OAuth開始画面を第三者に操作されないよう、十分に長いランダム値を`TBOT_SETUP_SECRET`へ設定します。
-5. 先に同じブラウザでKarotterへログインしてから、`https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
-6. 遷移したKarotter公式画面で対象アカウントのID・パスワードを入力し、OAuth認可を完了します。ID・パスワードがtbotへ送られたり保存されたりすることはありません。
+5. `https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
+6. tbot専用画面にKarotterのID・パスワードを入力します。認証情報はKarotterのログインAPIへ一度だけ転送し、パスワードはファイルやログへ保存しません。2段階認証が有効な場合は続けて認証コードを入力します。
 7. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
 
 `render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JPを取得するため、Render上でも日本語が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。またローカルファイルが失われる再起動後はOAuthの再認可が必要です。常時運用ではスリープしないプランとPersistent Diskを使用してください。
@@ -75,7 +75,7 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 
 ## 運用上の安全性
 
-- KarotterのID・パスワードはKarotter公式認可画面にだけ入力し、tbotでは受信・保存しません。
+- KarotterのID・パスワードはtbotの保護されたセットアップ画面からKarotterのログインAPIへ転送します。パスワードは永続化・ログ出力しません。
 - OAuthトークン、Client Secret、セットアップ用Secretはログやリポジトリへ保存しません。
 - アイコンURLはHTTPSかつ許可ホストの画像だけ取得します。
 - 取得画像は8MBまで、API通信はタイムアウト付きです。
