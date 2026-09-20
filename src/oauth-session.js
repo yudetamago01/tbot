@@ -8,6 +8,8 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1_000;
+const LEGACY_OAUTH_BASE_URL = "https://karotter.com/api/oauth";
+const OAUTH_BASE_URL = "https://api.karotter.com/api/oauth";
 
 export class OAuthAuthorizationRequiredError extends Error {
   constructor(message = "Karotter OAuth authorization is required") {
@@ -29,6 +31,11 @@ function safeEqual(left, right) {
   const a = Buffer.from(String(left || ""));
   const b = Buffer.from(String(right || ""));
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function normalizeOAuthBaseUrl(value) {
+  const normalized = String(value || OAUTH_BASE_URL).trim().replace(/\/+$/, "");
+  return normalized === LEGACY_OAUTH_BASE_URL ? OAUTH_BASE_URL : normalized;
 }
 
 export function verifySetupAuthorization(header, setupSecret) {
@@ -66,7 +73,7 @@ export class OAuthSession {
     this.clientSecret = clientSecret;
     this.redirectUri = redirectUri;
     this.scope = scope;
-    this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.baseUrl = normalizeOAuthBaseUrl(baseUrl);
     this.tokenPath = path.resolve(tokenPath);
     this.initialRefreshToken = initialRefreshToken;
     this.stateSecret = stateSecret || clientSecret;

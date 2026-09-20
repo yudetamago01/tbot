@@ -76,6 +76,17 @@ test("OAuth authorization uses PKCE and stores tokens after a valid callback", a
   assert.equal(saved.clientSecret, undefined);
 });
 
+test("legacy Karotter web OAuth base is migrated to the API host", () => {
+  const session = new OAuthSession({
+    clientId: "client-id",
+    redirectUri: "https://tbot.example/oauth/callback",
+    stateSecret: "state-secret",
+    baseUrl: "https://karotter.com/api/oauth/",
+  });
+
+  assert.equal(new URL(session.createAuthorizationUrl()).origin, "https://api.karotter.com");
+});
+
 test("a refresh token from Render secrets renews an expired access token", async (context) => {
   const { directory, tokenPath } = await temporaryTokenPath();
   context.after(() => rm(directory, { recursive: true, force: true }));
