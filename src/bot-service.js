@@ -45,14 +45,19 @@ export class BotService {
     if (this.status.startedAt) return;
     this.status.startedAt = new Date().toISOString();
     await this.stateStore.load();
-    if (!this.config.apiKey) {
-      this.status.lastError = "KAROTTER_API_KEY is not configured";
-      this.log.warn("polling_disabled_missing_api_key");
+    if (!this.client.hasAuthConfiguration()) {
+      this.status.lastError = "Karotter authentication is not configured";
+      this.log.warn("polling_disabled_missing_authentication");
       return;
     }
+    await this.resumeAfterAuthentication();
+  }
+
+  async resumeAfterAuthentication() {
     try {
       const me = await this.client.getMe();
       this.status.botUser = me?.user || me;
+      this.status.lastError = null;
       const username = this.status.botUser?.username;
       if (username && username.toLowerCase() !== this.config.username.toLowerCase()) {
         this.log.warn("configured_username_differs_from_api_user", {
@@ -62,14 +67,19 @@ export class BotService {
       }
     } catch (error) {
       this.status.lastError = error.message;
-      this.log.error("karotter_auth_check_failed", { error: error.message, status: error.status });
-      return;
+      const expectedAuthorization = error?.code === "OAUTH_AUTHORIZATION_REQUIRED";
+      this.log[expectedAuthorization ? "warn" : "error"]("karotter_auth_check_failed", {
+        error: error.message,
+        status: error.status,
+      });
+      return false;
     }
     if (!this.config.enablePolling) {
       this.log.info("polling_disabled_by_config");
-      return;
+      return true;
     }
     this.schedule(0);
+    return true;
   }
 
   schedule(delayMs) {
@@ -84,7 +94,7 @@ export class BotService {
   }
 
   async tick() {
-    if (this.running || this.stopped || !this.config.apiKey) return;
+    if (this.running || this.stopped) return;
     this.running = true;
     this.status.lastPollAt = new Date().toISOString();
     let nextDelay = this.config.pollIntervalMs;
@@ -247,8 +257,8 @@ export class BotService {
 
   health() {
     return {
-      ok: Boolean(this.config.apiKey) && !this.status.lastError,
-      polling: this.config.enablePolling && Boolean(this.config.apiKey) && !this.stopped,
+      ok: Boolean(this.status.botUser) && !this.status.lastError,
+      polling: this.config.enablePolling && Boolean(this.status.botUser) && !this.stopped,
       running: this.running,
       username: this.config.username,
       ...this.status,

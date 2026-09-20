@@ -16,9 +16,9 @@ function booleanEnv(name, fallback) {
 
 export function loadConfig() {
   const apiKey = String(process.env.KAROTTER_API_KEY || "").trim();
-  const authMode = String(process.env.KAROTTER_AUTH_MODE || "x-api-key").trim().toLowerCase();
-  if (!new Set(["x-api-key", "bearer"]).has(authMode)) {
-    throw new Error("KAROTTER_AUTH_MODE must be x-api-key or bearer");
+  const authMode = String(process.env.KAROTTER_AUTH_MODE || "oauth").trim().toLowerCase();
+  if (!new Set(["x-api-key", "bearer", "oauth"]).has(authMode)) {
+    throw new Error("KAROTTER_AUTH_MODE must be x-api-key, bearer, or oauth");
   }
   const baseUrl = String(
     process.env.KAROTTER_API_BASE_URL || "https://karotter.com/api/developer",
@@ -51,5 +51,15 @@ export function loadConfig() {
     statePath: String(process.env.STATE_PATH || "./data/state.json"),
     enablePolling: booleanEnv("ENABLE_POLLING", true),
     port: integerEnv("PORT", 3000, { min: 1, max: 65_535 }),
+    oauth: {
+      baseUrl: String(process.env.KAROTTER_OAUTH_BASE_URL || "https://karotter.com/api/oauth").replace(/\/+$/, ""),
+      clientId: String(process.env.KAROTTER_OAUTH_CLIENT_ID || "").trim(),
+      clientSecret: String(process.env.KAROTTER_OAUTH_CLIENT_SECRET || "").trim(),
+      redirectUri: String(process.env.KAROTTER_OAUTH_REDIRECT_URI || "").trim(),
+      scope: String(process.env.KAROTTER_OAUTH_SCOPE || "profile offline_access").trim(),
+      tokenPath: String(process.env.KAROTTER_OAUTH_TOKEN_PATH || "./data/oauth.json"),
+      refreshToken: String(process.env.KAROTTER_OAUTH_REFRESH_TOKEN || "").trim(),
+      setupSecret: String(process.env.TBOT_SETUP_SECRET || ""),
+    },
   };
 }

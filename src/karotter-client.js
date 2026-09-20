@@ -24,6 +24,7 @@ export class KarotterClient {
     baseUrl,
     timeoutMs = 15_000,
     requestsPerMinute = 55,
+    tokenProvider,
     fetchImpl = fetch,
   }) {
     this.apiKey = apiKey;
@@ -31,12 +32,22 @@ export class KarotterClient {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.timeoutMs = timeoutMs;
     this.requestsPerMinute = requestsPerMinute;
+    this.tokenProvider = tokenProvider;
     this.fetchImpl = fetchImpl;
     this.requestTimestamps = [];
     this.requestGate = Promise.resolve();
   }
 
-  authHeaders() {
+  hasAuthConfiguration() {
+    if (this.authMode === "oauth") return typeof this.tokenProvider === "function";
+    return Boolean(this.apiKey);
+  }
+
+  async authHeaders() {
+    if (this.authMode === "oauth") {
+      const token = await this.tokenProvider();
+      return { Authorization: `Bearer ${token}` };
+    }
     if (this.authMode === "bearer") return { Authorization: `Bearer ${this.apiKey}` };
     return { "x-api-key": this.apiKey };
   }
@@ -66,7 +77,7 @@ export class KarotterClient {
     await this.throttle();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-    const headers = { ...this.authHeaders(), ...(options.headers || {}) };
+    const headers = { ...(await this.authHeaders()), ...(options.headers || {}) };
     try {
       const response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {
         ...options,

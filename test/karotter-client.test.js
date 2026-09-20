@@ -48,6 +48,28 @@ test("bearer auth and post response unwrapping work", async () => {
   assert.equal(post.id, "post-1");
 });
 
+test("OAuth mode obtains a current bearer token from its provider", async () => {
+  let authorization;
+  let providerCalls = 0;
+  const client = new KarotterClient({
+    authMode: "oauth",
+    baseUrl: "https://karotter.com/api/developer",
+    tokenProvider: async () => {
+      providerCalls += 1;
+      return "oauth-access-token";
+    },
+    fetchImpl: async (_url, options) => {
+      authorization = options.headers.Authorization;
+      return jsonResponse({ user: { id: "user-1" } });
+    },
+  });
+
+  await client.getMe();
+  assert.equal(authorization, "Bearer oauth-access-token");
+  assert.equal(providerCalls, 1);
+  assert.equal(client.hasAuthConfiguration(), true);
+});
+
 test("image replies are sent as multipart posts with parentId and media", async () => {
   let form;
   let method;

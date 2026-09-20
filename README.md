@@ -12,7 +12,7 @@ Karotterの投稿中に書かれた`@tbot コマンド`を検出し、本文を�
 
 公式の[Karotter Developer API](https://karotter.com/api-docs)を使用します。
 
-- 認証: `x-api-key`または`Authorization: Bearer`
+- 認証: OAuth 2認可コードフロー（PKCE）で取得した`Authorization: Bearer`トークン
 - 必要スコープ: `canReadPosts`, `canCreatePosts`
 - 通知取得: `GET /api/developer/notifications?type=MENTION,REPLY`
 - 投稿取得: `GET /api/developer/posts/:postId`
@@ -39,20 +39,29 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 
 ## Render
 
-1. Karotterの設定画面でAPIキーを作成し、`canReadPosts`と`canCreatePosts`を付与します。
+1. Karotterの設定画面でOAuthアプリを作成し、`canReadPosts`と`canCreatePosts`を付与します。リダイレクトURIは`https://<Renderのサービス名>.onrender.com/oauth/callback`と完全一致させます。
 2. このリポジトリからRender Blueprintを作成します。
-3. RenderのSecret環境変数`KAROTTER_API_KEY`へAPIキーを設定します。
-4. デプロイ後に`/health`が`200`、`/ready`が`200`になることを確認します。
+3. `KAROTTER_OAUTH_CLIENT_ID`、`KAROTTER_OAUTH_CLIENT_SECRET`、`KAROTTER_OAUTH_REDIRECT_URI`をRenderのSecret環境変数へ設定します。
+4. OAuth開始画面を第三者に操作されないよう、十分に長いランダム値を`TBOT_SETUP_SECRET`へ設定します。
+5. デプロイ後に`https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
+6. 遷移したKarotter公式画面で対象アカウントのID・パスワードを入力し、OAuth認可を完了します。ID・パスワードがtbotへ送られたり保存されたりすることはありません。
+7. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
 
-`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JPを取得するため、Render上でも日本語が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。常時応答が必要ならスリープしないプランを使用してください。
+`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JPを取得するため、Render上でも日本語が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。またローカルファイルが失われる再起動後はOAuthの再認可が必要です。常時運用ではスリープしないプランとPersistent Diskを使用してください。
 
 ## 環境変数
 
 | 名前 | 既定値 | 用途 |
 |---|---:|---|
-| `KAROTTER_API_KEY` | なし | 必須。Karotter APIキー |
-| `KAROTTER_AUTH_MODE` | `x-api-key` | `x-api-key`または`bearer` |
+| `KAROTTER_AUTH_MODE` | `oauth` | 推奨は`oauth`。互換用に`x-api-key`と`bearer`も利用可能 |
 | `KAROTTER_API_BASE_URL` | `https://karotter.com/api/developer` | APIベースURL |
+| `KAROTTER_OAUTH_CLIENT_ID` | なし | OAuthアプリのClient ID |
+| `KAROTTER_OAUTH_CLIENT_SECRET` | なし | OAuthアプリのClient Secret |
+| `KAROTTER_OAUTH_REDIRECT_URI` | なし | 登録済みの`/oauth/callback` URL |
+| `KAROTTER_OAUTH_SCOPE` | `profile offline_access` | Karotterへ要求するOAuthスコープ |
+| `KAROTTER_OAUTH_TOKEN_PATH` | `./data/oauth.json` | OAuthトークンの保存先 |
+| `TBOT_SETUP_SECRET` | なし | `/oauth/start`を保護するBasic認証パスワード |
+| `KAROTTER_API_KEY` | なし | 旧APIキー認証を使う場合のみ |
 | `TBOT_USERNAME` | `tbot` | 検出するメンション名 |
 | `TBOT_TIME_ZONE` | `Asia/Tokyo` | 投稿日の表示タイムゾーン |
 | `POLL_INTERVAL_MS` | `15000` | 通知ポーリング間隔 |
@@ -61,11 +70,12 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 | `STATE_PATH` | `./data/state.json` | 生成投稿の参照元を保存する場所 |
 | `ENABLE_POLLING` | `true` | ポーリングの有効化 |
 
-`STATE_PATH`は生成画像への再返信で元投稿を引き継ぐために使います。Renderのローカルファイルは再起動や再デプロイで失われます。再デプロイをまたいで保持する場合は有料サービスへPersistent Diskを接続し、例として`/var/data/state.json`を指定してください（無料Web ServiceにはPersistent Diskを接続できません）。
+`STATE_PATH`は生成画像への再返信で元投稿を引き継ぐために使います。Renderのローカルファイルは再起動や再デプロイで失われます。再デプロイをまたいで保持する場合は有料サービスへPersistent Diskを接続し、`STATE_PATH=/var/data/state.json`、`KAROTTER_OAUTH_TOKEN_PATH=/var/data/oauth.json`のように指定してください（無料Web ServiceにはPersistent Diskを接続できません）。
 
 ## 運用上の安全性
 
-- APIキーはリポジトリへ保存しません。
+- KarotterのID・パスワードはKarotter公式認可画面にだけ入力し、tbotでは受信・保存しません。
+- OAuthトークン、Client Secret、セットアップ用Secretはログやリポジトリへ保存しません。
 - アイコンURLはHTTPSかつ許可ホストの画像だけ取得します。
 - 取得画像は8MBまで、API通信はタイムアウト付きです。
 - 通知は作成日時順に直列処理し、APIの60リクエスト/分制限に対して55回/分で事前抑制し、429応答の`Retry-After`も尊重します。
