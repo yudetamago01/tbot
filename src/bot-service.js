@@ -14,6 +14,12 @@ function sortOldestFirst(notifications) {
   });
 }
 
+function arrivedAfterStartup(notification, startedAt) {
+  const cutoff = Date.parse(startedAt || "");
+  const createdAt = Date.parse(notification?.createdAt || "");
+  return Number.isFinite(cutoff) && Number.isFinite(createdAt) && createdAt >= cutoff;
+}
+
 export class BotService {
   constructor({ client, renderer, stateStore, config, log }) {
     this.client = client;
@@ -87,10 +93,25 @@ export class BotService {
         limit: this.config.pollPageLimit,
         type: "MENTION,REPLY",
       });
-      const notifications = sortOldestFirst(result?.notifications || [])
+      const unread = (result?.notifications || [])
         .filter((notification) => !notification?.isRead)
-        .filter((notification) => !this.stateStore.hasProcessedNotification(notification?.id))
+        .filter((notification) => !this.stateStore.hasProcessedNotification(notification?.id));
+      const stale = unread
+        .filter((notification) => !arrivedAfterStartup(notification, this.status.startedAt))
+        .filter((notification) => notification?.id != null)
         .slice(0, this.config.maxNotificationsPerTick);
+      if (stale.length) {
+        this.log.info("discarding_prestartup_notifications", {
+          count: stale.length,
+          startedAt: this.status.startedAt,
+        });
+        for (const notification of stale) {
+          await this.finishNotification(notification.id, { ignored: true });
+        }
+      }
+      const notifications = sortOldestFirst(
+        unread.filter((notification) => arrivedAfterStartup(notification, this.status.startedAt)),
+      ).slice(0, this.config.maxNotificationsPerTick);
       for (const notification of notifications) {
         await this.processNotification(notification);
       }
