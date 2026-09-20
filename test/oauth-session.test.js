@@ -51,6 +51,7 @@ test("OAuth authorization uses PKCE and stores tokens after a valid callback", a
   });
 
   const authorizationUrl = new URL(session.createAuthorizationUrl());
+  assert.equal(authorizationUrl.origin, "https://api.karotter.com");
   assert.equal(authorizationUrl.pathname, "/api/oauth/authorize");
   assert.equal(authorizationUrl.searchParams.get("response_type"), "code");
   assert.equal(authorizationUrl.searchParams.get("code_challenge_method"), "S256");
@@ -62,7 +63,7 @@ test("OAuth authorization uses PKCE and stores tokens after a valid callback", a
   });
 
   const form = new URLSearchParams(request.options.body);
-  assert.equal(request.url, "https://karotter.com/api/oauth/token");
+  assert.equal(request.url, "https://api.karotter.com/api/oauth/token");
   assert.equal(form.get("grant_type"), "authorization_code");
   assert.equal(form.get("code"), "authorization-code");
   assert.equal(form.get("client_secret"), "client-secret");

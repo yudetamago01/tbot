@@ -52,7 +52,7 @@ export function loadConfig() {
     enablePolling: booleanEnv("ENABLE_POLLING", true),
     port: integerEnv("PORT", 3000, { min: 1, max: 65_535 }),
     oauth: {
-      baseUrl: String(process.env.KAROTTER_OAUTH_BASE_URL || "https://karotter.com/api/oauth").replace(/\/+$/, ""),
+      baseUrl: String(process.env.KAROTTER_OAUTH_BASE_URL || "https://api.karotter.com/api/oauth").replace(/\/+$/, ""),
       clientId: String(process.env.KAROTTER_OAUTH_CLIENT_ID || "").trim(),
       clientSecret: String(process.env.KAROTTER_OAUTH_CLIENT_SECRET || "").trim(),
       redirectUri: String(process.env.KAROTTER_OAUTH_REDIRECT_URI || "").trim(),

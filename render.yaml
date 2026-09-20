@@ -17,7 +17,7 @@ services:
       - key: TBOT_USERNAME
         value: tbot
       - key: KAROTTER_OAUTH_BASE_URL
-        value: https://karotter.com/api/oauth
+        value: https://api.karotter.com/api/oauth
       - key: KAROTTER_OAUTH_SCOPE
         value: profile offline_access
       - key: KAROTTER_OAUTH_TOKEN_PATH

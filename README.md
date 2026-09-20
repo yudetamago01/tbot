@@ -43,7 +43,7 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 2. このリポジトリからRender Blueprintを作成します。
 3. `KAROTTER_OAUTH_CLIENT_ID`、`KAROTTER_OAUTH_CLIENT_SECRET`、`KAROTTER_OAUTH_REDIRECT_URI`をRenderのSecret環境変数へ設定します。
 4. OAuth開始画面を第三者に操作されないよう、十分に長いランダム値を`TBOT_SETUP_SECRET`へ設定します。
-5. デプロイ後に`https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
+5. 先に同じブラウザでKarotterへログインしてから、`https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
 6. 遷移したKarotter公式画面で対象アカウントのID・パスワードを入力し、OAuth認可を完了します。ID・パスワードがtbotへ送られたり保存されたりすることはありません。
 7. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
 
@@ -58,6 +58,7 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 | `KAROTTER_OAUTH_CLIENT_ID` | なし | OAuthアプリのClient ID |
 | `KAROTTER_OAUTH_CLIENT_SECRET` | なし | OAuthアプリのClient Secret |
 | `KAROTTER_OAUTH_REDIRECT_URI` | なし | 登録済みの`/oauth/callback` URL |
+| `KAROTTER_OAUTH_BASE_URL` | `https://api.karotter.com/api/oauth` | OAuth認可・トークンのベースURL。ログインセッションを共有するAPIホストを使用 |
 | `KAROTTER_OAUTH_SCOPE` | `profile offline_access` | Karotterへ要求するOAuthスコープ |
 | `KAROTTER_OAUTH_TOKEN_PATH` | `./data/oauth.json` | OAuthトークンの保存先 |
 | `TBOT_SETUP_SECRET` | なし | `/oauth/start`を保護するBasic認証パスワード |

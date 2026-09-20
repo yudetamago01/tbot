@@ -51,7 +51,10 @@ export class OAuthSession {
     clientSecret,
     redirectUri,
     scope = "profile offline_access",
-    baseUrl = "https://karotter.com/api/oauth",
+    // The OAuth session cookie belongs to Karotter's API host. Starting the
+    // authorization request on the web host can bounce a signed-in user back
+    // to /login indefinitely even though both hosts expose the same route.
+    baseUrl = "https://api.karotter.com/api/oauth",
     tokenPath = "./data/oauth.json",
     initialRefreshToken,
     stateSecret,
