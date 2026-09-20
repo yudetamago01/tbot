@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: karotter-tbot
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci && npm run fonts:install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: KAROTTER_API_BASE_URL
+        value: https://karotter.com/api/developer
+      - key: KAROTTER_AUTH_MODE
+        value: x-api-key
+      - key: TBOT_USERNAME
+        value: tbot
+      - key: TBOT_TIME_ZONE
+        value: Asia/Tokyo
+      - key: POLL_INTERVAL_MS
+        value: 15000
+      - key: POLL_PAGE_LIMIT
+        value: 50
+      - key: MAX_NOTIFICATIONS_PER_TICK
+        value: 10
+      - key: HTTP_TIMEOUT_MS
+        value: 15000
+      - key: KAROTTER_REQUESTS_PER_MINUTE
+        value: 55
+      - key: AVATAR_ALLOWED_HOSTS
+        value: karotter.com,api.karotter.com
+      - key: STATE_PATH
+        value: ./data/state.json
+      - key: ENABLE_POLLING
+        value: true
+      - key: KAROTTER_API_KEY
+        sync: false
