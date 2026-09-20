@@ -1,7 +1,6 @@
 import {
-  createCipheriv,
-  createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
   timingSafeEqual,
 } from "node:crypto";
@@ -22,8 +21,8 @@ function base64UrlSha256(value) {
   return createHash("sha256").update(value).digest("base64url");
 }
 
-function stateEncryptionKey(secret) {
-  return createHash("sha256").update(`tbot-oauth-state\0${secret}`).digest();
+function hmacBase64Url(secret, value) {
+  return createHmac("sha256", secret).update(value).digest("base64url");
 }
 
 function safeEqual(left, right) {
@@ -123,8 +122,8 @@ export class OAuthSession {
     if (!this.stateSecret) {
       throw new OAuthAuthorizationRequiredError("OAuth state secret is not configured");
     }
-    const verifier = randomBytes(48).toString("base64url");
-    const state = this.createState({ verifier, createdAt: Date.now() });
+    const state = this.createState();
+    const verifier = this.verifierForState(state.split(".")[0]);
     const url = new URL(`${this.baseUrl}/authorize`);
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", this.clientId);
@@ -156,38 +155,32 @@ export class OAuthSession {
     });
   }
 
-  createState(payload) {
-    const initializationVector = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", stateEncryptionKey(this.stateSecret), initializationVector);
-    const encrypted = Buffer.concat([
-      cipher.update(JSON.stringify({ version: 1, ...payload }), "utf8"),
-      cipher.final(),
-    ]);
-    return Buffer.concat([initializationVector, cipher.getAuthTag(), encrypted]).toString("base64url");
+  createState() {
+    const issuedAt = Buffer.alloc(8);
+    issuedAt.writeBigUInt64BE(BigInt(Date.now()));
+    const nonce = Buffer.concat([issuedAt, randomBytes(16)]).toString("base64url");
+    const signature = hmacBase64Url(this.stateSecret, `tbot-oauth-state\0${nonce}`);
+    return `${nonce}.${signature}`;
   }
 
   readState(value) {
     if (!value || !this.stateSecret) return null;
     try {
-      const sealed = Buffer.from(String(value), "base64url");
-      if (sealed.length < 29) return null;
-      const initializationVector = sealed.subarray(0, 12);
-      const authenticationTag = sealed.subarray(12, 28);
-      const encrypted = sealed.subarray(28);
-      const decipher = createDecipheriv(
-        "aes-256-gcm",
-        stateEncryptionKey(this.stateSecret),
-        initializationVector,
-      );
-      decipher.setAuthTag(authenticationTag);
-      const parsed = JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8"));
-      if (parsed?.version !== 1 || typeof parsed.verifier !== "string" || !Number.isFinite(parsed.createdAt)) {
+      const [nonce, signature] = String(value).split(".");
+      if (!nonce || !signature || !safeEqual(signature, hmacBase64Url(this.stateSecret, `tbot-oauth-state\0${nonce}`))) {
         return null;
       }
-      return parsed;
+      const nonceBytes = Buffer.from(nonce, "base64url");
+      if (nonceBytes.length !== 24) return null;
+      const createdAt = Number(nonceBytes.readBigUInt64BE(0));
+      return { createdAt, verifier: this.verifierForState(nonce) };
     } catch {
       return null;
     }
+  }
+
+  verifierForState(state) {
+    return hmacBase64Url(this.stateSecret, `tbot-oauth-pkce\0${state}`);
   }
 
   async getAccessToken() {
