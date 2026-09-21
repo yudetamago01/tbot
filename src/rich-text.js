@@ -674,8 +674,11 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const topY = options.topY ?? 160;
   const requestedLineGap = options.lineGap || requestedSize * 1.35;
   const lineGapRatio = requestedLineGap / requestedSize;
-  const fitHeight = options.fitHeight
+  const requestedFitHeight = options.fitHeight
     ?? (Number.isFinite(options.maxLines) ? options.maxLines * requestedLineGap : Number.POSITIVE_INFINITY);
+  const fitHeight = Number.isFinite(requestedFitHeight)
+    ? requestedFitHeight * (options.adaptiveFitScale || 1.08)
+    : requestedFitHeight;
   const adaptive = options.adaptive !== false && Number.isFinite(fitHeight);
   const minFontSize = Math.min(requestedSize, options.minFontSize || 12);
   const runs = tokenizeRichText(value);
@@ -709,6 +712,12 @@ export function drawRichWithTheme(ctx, value, options = {}) {
     for (let fontSize = requestedSize - 1; fontSize >= minFontSize; fontSize -= 1) {
       if (layout.width <= maxWidth && layout.height <= fitHeight) break;
       layout = makeLayout(fontSize);
+    }
+    if (layout.fontSize < requestedSize) {
+      const slightlyLarger = makeLayout(layout.fontSize + 1);
+      if (slightlyLarger.width <= maxWidth * 1.02 && slightlyLarger.height <= fitHeight * 1.12) {
+        layout = slightlyLarger;
+      }
     }
   }
   const { fontSize: baseSize, lineGap, lines, widths } = layout;

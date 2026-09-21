@@ -71,7 +71,7 @@ test("long non-post text scales down to keep about 200 characters in the composi
   });
   assert.ok(layout.fontSize < 49);
   assert.ok(layout.fontSize >= 12);
-  assert.ok(layout.layoutHeight <= 3 * 58);
+  assert.ok(layout.layoutHeight <= 3 * 58 * 1.08 * 1.12);
 });
 
 test("post text keeps its fixed typography when adaptive fitting is disabled", () => {
@@ -113,4 +113,12 @@ test("Gold renders emoji and KaTeX color input without rejecting it", async () =
   assert.equal(tokenizeRichText(text).some((run) => run.text.includes("🌃")), true);
   const png = await renderImage({ commandId: "gold", text, profile: { handle: "@test" } });
   assert.ok(png.length > 10_000);
+});
+
+test("Poem renders brush-style short and 200-character layouts", async () => {
+  const profile = { handle: "@test" };
+  const short = await renderImage({ commandId: "poem", text: "明日もきっと晴れる", profile });
+  const long = await renderImage({ commandId: "poem", text: "長".repeat(200), profile });
+  assert.ok(short.length > 10_000);
+  assert.ok(long.length > 10_000);
 });

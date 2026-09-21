@@ -53,7 +53,7 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 5. デプロイ時にtbotがID・パスワードで自動ログインします。手動で認証し直す場合だけ`https://<サービス名>.onrender.com/oauth/start`を使用します。
 6. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
 
-`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JP / Noto Color Emojiを取得するため、Render上でも日本語や絵文字が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。再起動後はRender SecretのID・パスワードで自動的に再ログインします。常時運用ではスリープしないプランを使用してください。
+`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JP / Noto Color Emojiと、`poem`用のYuji Syukuを取得するため、Render上でも日本語・筆文字・絵文字が正しく描画されます。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。再起動後はRender SecretのID・パスワードで自動的に再ログインします。常時運用ではスリープしないプランを使用してください。
 
 ## 環境変数
 

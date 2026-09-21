@@ -15,6 +15,10 @@ const fonts = [
     name: "NotoColorEmoji.ttf",
     url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notocoloremoji/NotoColorEmoji-Regular.ttf",
   },
+  {
+    name: "YujiSyuku.ttf",
+    url: "https://raw.githubusercontent.com/google/fonts/main/ofl/yujisyuku/YujiSyuku-Regular.ttf",
+  },
 ];
 
 const outputDirectory = fileURLToPath(new URL("../assets/fonts/", import.meta.url));

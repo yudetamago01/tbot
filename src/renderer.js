@@ -20,6 +20,7 @@ const EMOJI = '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"';
 const SANS = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", ${EMOJI}, sans-serif`;
 const SERIF = `"Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, ${EMOJI}, serif`;
 const MONO = `"Cascadia Mono", Consolas, "MS Gothic", ${EMOJI}, monospace`;
+const BRUSH = `"Yuji Syuku", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", ${EMOJI}, serif`;
 const SNS_ICON_COLOR = "#536471";
 
 const snsIconSources = {
@@ -45,6 +46,7 @@ let fontsRegistered = false;
 const bundledSans = fileURLToPath(new URL("../assets/fonts/NotoSansJP.ttf", import.meta.url));
 const bundledSerif = fileURLToPath(new URL("../assets/fonts/NotoSerifJP.ttf", import.meta.url));
 const bundledEmoji = fileURLToPath(new URL("../assets/fonts/NotoColorEmoji.ttf", import.meta.url));
+const bundledBrush = fileURLToPath(new URL("../assets/fonts/YujiSyuku.ttf", import.meta.url));
 
 function registerFonts() {
   if (fontsRegistered) return;
@@ -56,6 +58,8 @@ function registerFonts() {
     ["Noto Serif JP", bundledSerif],
     ["Noto Color Emoji", process.env.TBOT_FONT_EMOJI],
     ["Noto Color Emoji", bundledEmoji],
+    ["Yuji Syuku", process.env.TBOT_FONT_BRUSH],
+    ["Yuji Syuku", bundledBrush],
     ["Noto Sans JP", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"],
     ["Noto Serif JP", "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"],
     ["Yu Gothic UI", "C:\\Windows\\Fonts\\YuGothM.ttc"],
@@ -830,8 +834,9 @@ function drawVertical(ctx, text, options = {}) {
   const requestedSize = options.fontSize || 43;
   const requestedRowGap = options.rowGap || 47;
   const requestedColumnGap = options.columnGap || 60;
-  const fitWidth = options.fitWidth || WIDTH - 96;
-  const fitHeight = options.fitHeight || HEIGHT - 80;
+  const fitScale = options.adaptiveFitScale || 1.06;
+  const fitWidth = (options.fitWidth || WIDTH - 96) * fitScale;
+  const fitHeight = (options.fitHeight || HEIGHT - 80) * fitScale;
   const minFontSize = Math.min(requestedSize, options.minFontSize || 12);
   const dimensions = (fontSize, rows) => {
     const scale = fontSize / requestedSize;
@@ -851,12 +856,21 @@ function drawVertical(ctx, text, options = {}) {
   };
   let layout = dimensions(requestedSize, requestedRows);
   if (layout.width > fitWidth || layout.height > fitHeight) {
-    for (let fontSize = requestedSize - 1; fontSize >= minFontSize; fontSize -= 1) {
+    const adaptiveLayout = (fontSize) => {
       const scale = fontSize / requestedSize;
       const rowGap = requestedRowGap * scale;
       const rowsByHeight = Math.max(1, Math.floor((fitHeight - fontSize) / rowGap) + 1);
-      layout = dimensions(fontSize, Math.max(requestedRows, rowsByHeight));
+      return dimensions(fontSize, Math.max(requestedRows, rowsByHeight));
+    };
+    for (let fontSize = requestedSize - 1; fontSize >= minFontSize; fontSize -= 1) {
+      layout = adaptiveLayout(fontSize);
       if (layout.width <= fitWidth && layout.height <= fitHeight) break;
+    }
+    if (layout.fontSize < requestedSize) {
+      const slightlyLarger = adaptiveLayout(layout.fontSize + 1);
+      if (slightlyLarger.width <= fitWidth * 1.08 && slightlyLarger.height <= fitHeight * 1.08) {
+        layout = slightlyLarger;
+      }
     }
   }
   const {
@@ -872,8 +886,11 @@ function drawVertical(ctx, text, options = {}) {
   const rows = Math.min(maxRows, chars.length);
   const top = centerY - ((rows - 1) * rowGap) / 2;
   const random = randomFor(options.seed || text);
+  const columnOffsets = Array.from(
+    { length: columns },
+    () => (random() - 0.5) * (options.columnJitter || 0),
+  );
   ctx.save();
-  ctx.font = `${options.weight || 600} ${fontSize}px ${options.family || SERIF}`;
   ctx.fillStyle = options.color || "#111";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -886,30 +903,69 @@ function drawVertical(ctx, text, options = {}) {
     const row = index % maxRows;
     const jitter = options.jitter || 0;
     const x = right - column * columnGap + (random() - 0.5) * jitter;
-    const y = top + row * rowGap + (random() - 0.5) * jitter;
-    ctx.fillText(char, x, y);
+    const y = top + row * rowGap + columnOffsets[column] + (random() - 0.5) * jitter;
+    const sizeJitter = options.sizeJitter || 0;
+    const glyphSize = fontSize * (1 + (random() - 0.5) * sizeJitter);
+    const rotation = (random() - 0.5) * (options.rotationJitter || 0);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    ctx.font = `${options.weight || 600} ${glyphSize}px ${options.family || SERIF}`;
+    ctx.fillText(char, 0, 0);
+    if (options.inkTexture) {
+      ctx.globalAlpha = 0.16;
+      ctx.fillText(char, (random() - 0.5) * 1.2, (random() - 0.5) * 1.2);
+    }
+    ctx.restore();
   });
   ctx.restore();
-  return { left: right - (columns - 1) * columnGap - fontSize / 2, bottom: top + (rows - 1) * rowGap + fontSize / 2 };
+  return {
+    left: right - (columns - 1) * columnGap - fontSize / 2,
+    bottom: top + (rows - 1) * rowGap + fontSize / 2 + (options.columnJitter || 0) / 2,
+  };
 }
 
 function drawPoem(ctx, text) {
   const paper = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-  paper.addColorStop(0, "#f7f4ec");
-  paper.addColorStop(0.5, "#fffef9");
-  paper.addColorStop(1, "#eee9de");
+  paper.addColorStop(0, "#f7f3e9");
+  paper.addColorStop(0.48, "#fffefa");
+  paper.addColorStop(1, "#f0eadf");
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  paperTexture(ctx, `poem:${text}`, { alpha: 0.026, specks: 980 });
-  const layout = drawVertical(ctx, text, { centerX: WIDTH / 2 + 18, centerY: HEIGHT / 2 - 2, fontSize: 43, jitter: 2.2, seed: `poem:${text}` });
-  const x = Math.max(36, layout.left - 46);
-  const y = Math.min(HEIGHT - 54, layout.bottom - 16);
+  paperTexture(ctx, `poem:${text}`, { alpha: 0.022, specks: 760 });
+  const length = Array.from(plainText(text).replace(/\s/g, "")).length;
+  const short = length <= 30;
+  const fontSize = length <= 10 ? 76 : length <= 20 ? 62 : length <= 30 ? 52 : 44;
+  const maxRows = short
+    ? Math.max(3, Math.min(5, Math.ceil(Math.sqrt(Math.max(1, length)))))
+    : 7;
+  const layout = drawVertical(ctx, text, {
+    centerX: WIDTH / 2 + 20,
+    centerY: HEIGHT / 2 - 8,
+    maxRows,
+    fontSize,
+    rowGap: fontSize * 1.04,
+    columnGap: fontSize * 1.46,
+    fitWidth: WIDTH - 126,
+    fitHeight: HEIGHT - 110,
+    family: BRUSH,
+    weight: 400,
+    color: "#11100e",
+    jitter: short ? 8 : 2.5,
+    columnJitter: short ? 28 : 5,
+    sizeJitter: short ? 0.3 : 0.08,
+    rotationJitter: short ? 0.1 : 0.025,
+    inkTexture: true,
+    seed: `poem:${text}`,
+  });
+  const x = Math.max(40, layout.left - (short ? 54 : 38));
+  const y = Math.min(HEIGHT - 58, layout.bottom - (short ? 8 : 14));
   ctx.strokeStyle = "#b71c1c";
-  ctx.lineWidth = 2;
-  roundedRect(ctx, x - 17, y - 17, 34, 34, 3);
+  ctx.lineWidth = 2.2;
+  roundedRect(ctx, x - 17, y - 17, 34, 34, 2);
   ctx.stroke();
   ctx.fillStyle = "#b71c1c";
-  ctx.font = `800 15px ${SERIF}`;
+  ctx.font = `400 17px ${BRUSH}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("詩", x, y);
