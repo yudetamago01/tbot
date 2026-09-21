@@ -223,7 +223,12 @@ export class OAuthSession {
     if (this.tokens.accessToken && Date.now() < this.tokens.expiresAt - 60_000) {
       return this.tokens.accessToken;
     }
-    if (!this.tokens.refreshToken) throw new OAuthAuthorizationRequiredError();
+    if (!this.tokens.refreshToken) {
+      const message = this.tokens.provider === "account" || this.defaultProvider === "account"
+        ? "Karotter account authentication is required"
+        : undefined;
+      throw new OAuthAuthorizationRequiredError(message);
+    }
     if (!this.refreshPromise) {
       this.refreshPromise = (this.tokens.provider === "account"
         ? this.refreshAccountToken()
