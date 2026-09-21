@@ -349,13 +349,16 @@ function drawRun(ctx, run, x, y, baseSize, family, defaultColor) {
   ctx.fillStyle = color;
   ctx.textAlign = "left";
   ctx.fillText(run.text, x, y);
-  const width = ctx.measureText(run.text).width;
+  const metrics = ctx.measureText(run.text);
+  const width = metrics.width;
   if (run.strike) {
+    const glyphCenter = y + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2;
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, baseSize * 0.055);
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(x, y - baseSize * 0.25);
-    ctx.lineTo(x + width, y - baseSize * 0.25);
+    ctx.moveTo(x, glyphCenter);
+    ctx.lineTo(x + width, glyphCenter);
     ctx.stroke();
   }
   return width;
