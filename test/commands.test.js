@@ -21,6 +21,11 @@ for (const [input, commandId, content] of cases) {
   });
 }
 
+test("parseCommand preserves Markdown line breaks", () => {
+  const parsed = parseCommand("# 見出し\n本文 $ E=mc^2 $\n@tbot gold", "tbot");
+  assert.equal(parsed.content, "# 見出し\n本文 $ E=mc^2 $");
+});
+
 test("command-only reply", () => {
   const parsed = parseCommand("@tbot+gold", "tbot");
   assert.equal(parsed.command.id, "gold");

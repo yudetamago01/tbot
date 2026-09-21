@@ -102,7 +102,13 @@ export function parseMathExpression(value) {
 }
 
 export function tokenizeRichText(value) {
-  const source = String(value || "");
+  const source = String(value || "")
+    .replace(/<strong>([\s\S]*?)<\/strong>/gi, "**$1**")
+    .replace(/<b>([\s\S]*?)<\/b>/gi, "**$1**")
+    .replace(/<em>([\s\S]*?)<\/em>/gi, "*$1*")
+    .replace(/<i>([\s\S]*?)<\/i>/gi, "*$1*")
+    .replace(/<(?:del|s)>([\s\S]*?)<\/(?:del|s)>/gi, "~~$1~~")
+    .replace(/<code>([\s\S]*?)<\/code>/gi, "`$1`");
   const runs = [];
   let buffer = "";
   let style = { bold: false, italic: false, code: false, math: false, color: null, size: 1 };
@@ -118,6 +124,24 @@ export function tokenizeRichText(value) {
 
   let index = 0;
   while (index < source.length) {
+    if (source.startsWith("\\[", index)) {
+      const end = source.indexOf("\\]", index + 2);
+      if (end >= 0) {
+        push();
+        runs.push({ text: source.slice(index + 2, end).trim(), math: true, block: true, bold: false, italic: false, code: false, color: null, size: 1.05 });
+        index = end + 2;
+        continue;
+      }
+    }
+    if (source.startsWith("\\(", index)) {
+      const end = source.indexOf("\\)", index + 2);
+      if (end >= 0) {
+        push();
+        runs.push({ text: source.slice(index + 2, end).trim(), math: true, block: false, bold: false, italic: false, code: false, color: null, size: 1 });
+        index = end + 2;
+        continue;
+      }
+    }
     if (source.startsWith("$$", index)) {
       const end = source.indexOf("$$", index + 2);
       if (end >= 0) {
@@ -133,8 +157,8 @@ export function tokenizeRichText(value) {
     }
     if (source[index] === "$" && source[index + 1] !== "$") {
       const end = source.indexOf("$", index + 1);
-      if (end > index + 1 && !/\s/.test(source[index + 1])) {
-        const body = source.slice(index + 1, end);
+      if (end > index + 1) {
+        const body = source.slice(index + 1, end).trim();
         if (!body.includes("\n")) {
           push();
           runs.push({ text: body, math: true, block: false, bold: false, italic: false, code: false, color: null, size: 1 });
@@ -170,6 +194,15 @@ export function tokenizeRichText(value) {
         push();
         runs.push({ text: source.slice(index + 2, end), strike: true, bold: false, italic: false, code: false, math: false, color: "#9ca3af", size: 1 });
         index = end + 2;
+        continue;
+      }
+    }
+    if (source[index] === "~" && source[index + 1] !== "~") {
+      const end = source.indexOf("~", index + 1);
+      if (end > index + 1) {
+        push();
+        runs.push({ text: source.slice(index + 1, end), strike: true, bold: false, italic: false, code: false, math: false, color: "#9ca3af", size: 1 });
+        index = end + 1;
         continue;
       }
     }
@@ -593,7 +626,7 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const lineGap = options.lineGap || baseSize * 1.35;
   const runs = tokenizeRichText(value);
   const displayThemes = new Set(["neon", "gold", "glitch", "pixel", "stamp", "banner", "rainbow", "sticker", "speech"]);
-  if (!hasDecoration(runs) && displayThemes.has(theme)) {
+  if (displayThemes.has(theme)) {
     runs.forEach((run) => {
       if (!run.math && !run.code) run.bold = true;
     });

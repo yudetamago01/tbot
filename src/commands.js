@@ -43,7 +43,9 @@ export function parseCommand(input, botUsername = "tbot") {
     unknown: true,
   };
   const content = `${text.slice(0, match.index)} ${text.slice(match.index + match[0].length)}`
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/ *\r?\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
   return {
     command,
