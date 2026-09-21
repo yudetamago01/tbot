@@ -563,13 +563,15 @@ function hasDecoration(runs) {
 
 function blitThemeEffect(ctx, source, theme, x, y, options) {
   const tint = (color) => tintCanvas(source, color);
+  const effectScale = Math.max(0.26, Math.min(1, options.effectScale || 1));
+  const scaled = (value, floor = 0) => Math.max(floor, value * effectScale);
   const seed = effectSeed(`${theme}:${options.seed || "text"}:${source.width}x${source.height}`);
   const random = effectRandom(seed);
   ctx.save();
   if (theme === "neon") {
-    drawSoftMask(ctx, source, x, y, "#22d3ee", 22, 0.36);
-    drawSoftMask(ctx, source, x, y, "#38bdf8", 8, 0.4);
-    drawMaskOutline(ctx, source, x, y, 1.5, "#fbfdff", 18, 0.9);
+    drawSoftMask(ctx, source, x, y, "#22d3ee", scaled(22, 5), 0.36);
+    drawSoftMask(ctx, source, x, y, "#38bdf8", scaled(8, 2), 0.4);
+    drawMaskOutline(ctx, source, x, y, scaled(1.5, 0.5), "#fbfdff", 18, 0.9);
     ctx.globalCompositeOperation = "screen";
     ctx.drawImage(gradientTintCanvas(source, [[0, "#ffffff"], [0.48, "#a5f3fc"], [1, "#ffffff"]], true), x, y);
     if (options.hasExplicitColors) {
@@ -578,13 +580,15 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
       ctx.drawImage(source, x, y);
     }
   } else if (theme === "gold") {
-    drawSoftMask(ctx, source, x, y, "#ffca3a", 18, 0.34, 0, 4);
-    drawMaskOutline(ctx, source, x + 5, y + 6, 4, "#5a2f00", 28, 0.76);
-    for (let depth = 6; depth >= 1; depth -= 1) {
+    drawSoftMask(ctx, source, x, y, "#ffca3a", scaled(18, 4), 0.34, 0, scaled(4, 1));
+    drawMaskOutline(ctx, source, x + scaled(5, 1), y + scaled(6, 1), scaled(4, 1), "#5a2f00", 28, 0.76);
+    const extrusionDepth = Math.max(1, Math.round(6 * effectScale));
+    for (let depth = extrusionDepth; depth >= 1; depth -= 1) {
       ctx.globalAlpha = 0.96;
-      ctx.drawImage(tint(depth > 4 ? "#4b2700" : depth > 2 ? "#8d5700" : "#d49a15"), x + depth, y + depth);
+      const progress = depth / extrusionDepth;
+      ctx.drawImage(tint(progress > 0.66 ? "#4b2700" : progress > 0.33 ? "#8d5700" : "#d49a15"), x + depth, y + depth);
     }
-    drawMaskOutline(ctx, source, x, y, 1.8, "#5d3300", 20, 0.92);
+    drawMaskOutline(ctx, source, x, y, scaled(1.8, 0.6), "#5d3300", 20, 0.92);
     ctx.globalAlpha = 1;
     ctx.drawImage(gradientTintCanvas(source, [[0, "#fffbe6"], [0.18, "#ffe998"], [0.42, "#b86e00"], [0.62, "#fff2a8"], [0.82, "#d38a00"], [1, "#fff8d2"]]), x, y);
     ctx.globalCompositeOperation = "screen";
@@ -596,11 +600,11 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
       ctx.drawImage(source, x, y);
     }
   } else if (theme === "glitch") {
-    drawSoftMask(ctx, source, x, y, "#ff1744", 8, 0.17, -3, 0);
+    drawSoftMask(ctx, source, x, y, "#ff1744", scaled(8, 2), 0.17, -scaled(3, 1), 0);
     ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = 0.72;
-    ctx.drawImage(tint("#ff124f"), x - 3.5, y + 1);
-    ctx.drawImage(tint("#00e5ff"), x + 3.5, y - 1);
+    ctx.drawImage(tint("#ff124f"), x - scaled(3.5, 1), y + scaled(1, 0.4));
+    ctx.drawImage(tint("#00e5ff"), x + scaled(3.5, 1), y - scaled(1, 0.4));
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
     ctx.drawImage(source, x, y);
@@ -608,7 +612,7 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
     for (let index = 0; index < slices; index += 1) {
       const height = 2 + Math.floor(random() * 8);
       const sliceY = Math.floor(random() * Math.max(1, source.height - height));
-      const shift = Math.round((random() - 0.5) * 12);
+      const shift = Math.round((random() - 0.5) * scaled(12, 3));
       ctx.save();
       ctx.beginPath();
       ctx.rect(x - 18, y + sliceY, source.width + 36, height);
@@ -617,7 +621,7 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
       ctx.restore();
     }
   } else if (theme === "pixel") {
-    const cell = options.pixelCell || 6;
+    const cell = Math.max(2, Math.round((options.pixelCell || 6) * effectScale));
     const pixels = pixelateCanvas(source, cell);
     const px = x - Math.round((pixels.width - source.width) / 2);
     const py = y - Math.round((pixels.height - source.height) / 2);
@@ -627,17 +631,17 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
     ctx.drawImage(pixels, px, py);
     ctx.imageSmoothingEnabled = true;
   } else if (theme === "rainbow") {
-    drawMaskOutline(ctx, source, x, y + 2, 5, "rgba(25,17,37,0.72)", 30, 0.82);
-    drawMaskOutline(ctx, source, x, y, 2.5, "#ffffff", 24, 0.98);
+    drawMaskOutline(ctx, source, x, y + scaled(2, 0.5), scaled(5, 1), "rgba(25,17,37,0.72)", 30, 0.82);
+    drawMaskOutline(ctx, source, x, y, scaled(2.5, 0.7), "#ffffff", 24, 0.98);
     ctx.drawImage(gradientTintCanvas(source, [[0, "#ff0033"], [0.16, "#ff6600"], [0.33, "#ffcc00"], [0.5, "#33ff66"], [0.67, "#00ccff"], [0.84, "#3366ff"], [1, "#cc33ff"]], true), x, y);
     if (options.hasExplicitColors) {
       ctx.globalAlpha = 0.86;
       ctx.drawImage(source, x, y);
     }
   } else if (theme === "stamp") {
-    const ink = distressCanvas(tint("#a30f21"), `${seed}:ink`, 0.0024);
+    const ink = distressCanvas(tint("#a30f21"), `${seed}:ink`, 0.0024 * Math.max(0.4, effectScale));
     ctx.globalCompositeOperation = "multiply";
-    drawMaskOutline(ctx, ink, x + 2, y + 3, 2.4, "rgba(77,5,15,0.65)", 20, 0.65);
+    drawMaskOutline(ctx, ink, x + scaled(2, 0.5), y + scaled(3, 0.7), scaled(2.4, 0.65), "rgba(77,5,15,0.65)", 20, 0.65);
     ctx.globalAlpha = 0.96;
     ctx.drawImage(ink, x, y);
     if (options.hasExplicitColors) {
@@ -646,12 +650,12 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
       ctx.drawImage(source, x, y);
     }
   } else if (theme === "sticker") {
-    drawSoftMask(ctx, source, x, y, "#27345f", 12, 0.24, 0, 10);
-    drawMaskOutline(ctx, source, x, y, 12, "#ffffff", 56, 1);
-    drawMaskOutline(ctx, source, x, y, 2, "#29456f", 20, 0.82);
+    drawSoftMask(ctx, source, x, y, "#27345f", scaled(12, 3), 0.24, 0, scaled(10, 2));
+    drawMaskOutline(ctx, source, x, y, scaled(12, 3), "#ffffff", 56, 1);
+    drawMaskOutline(ctx, source, x, y, scaled(2, 0.6), "#29456f", 20, 0.82);
     ctx.drawImage(source, x, y);
   } else if (["speech", "banner", "fancy", "quote", "mono", "plain"].includes(theme)) {
-    drawSoftMask(ctx, source, x, y, theme === "plain" ? "#000000" : "#25190f", 5, theme === "plain" ? 0.22 : 0.12, 0, 2);
+    drawSoftMask(ctx, source, x, y, theme === "plain" ? "#000000" : "#25190f", scaled(5, 1.5), theme === "plain" ? 0.22 : 0.12, 0, scaled(2, 0.5));
     ctx.drawImage(source, x, y);
   } else {
     ctx.drawImage(source, x, y);
@@ -662,15 +666,18 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
 export function drawRichWithTheme(ctx, value, options = {}) {
   const theme = options.theme || "plain";
   const family = options.family || DEFAULT_FAMILY;
-  const baseSize = options.fontSize || 40;
+  const requestedSize = options.fontSize || 40;
   const maxWidth = options.maxWidth || 520;
-  // User-authored text is never shortened. If it exceeds the composition,
-  // it is still painted and allowed to cross the theme's visual bounds.
   const defaultColor = options.color || "#0f1419";
   const mode = options.mode || "center";
   const centerX = options.cx ?? 360;
   const topY = options.topY ?? 160;
-  const lineGap = options.lineGap || baseSize * 1.35;
+  const requestedLineGap = options.lineGap || requestedSize * 1.35;
+  const lineGapRatio = requestedLineGap / requestedSize;
+  const fitHeight = options.fitHeight
+    ?? (Number.isFinite(options.maxLines) ? options.maxLines * requestedLineGap : Number.POSITIVE_INFINITY);
+  const adaptive = options.adaptive !== false && Number.isFinite(fitHeight);
+  const minFontSize = Math.min(requestedSize, options.minFontSize || 12);
   const runs = tokenizeRichText(value);
   const hasExplicitColors = runs.some(
     (run) => run.color || (run.math && /\\(?:color|textcolor)\b/.test(run.text)),
@@ -682,8 +689,29 @@ export function drawRichWithTheme(ctx, value, options = {}) {
     });
   }
 
-  const lines = wrapRichRuns(ctx, runs, maxWidth, baseSize, family);
-  const widths = lines.map((line) => line.reduce((sum, run) => sum + measureRun(ctx, run, baseSize, family).width, 0));
+  const makeLayout = (fontSize) => {
+    const layoutLines = wrapRichRuns(ctx, runs, maxWidth, fontSize, family);
+    const widths = layoutLines.map(
+      (line) => line.reduce((sum, run) => sum + measureRun(ctx, run, fontSize, family).width, 0),
+    );
+    const lineGap = lineGapRatio * fontSize;
+    return {
+      fontSize,
+      lineGap,
+      lines: layoutLines,
+      widths,
+      width: Math.max(1, ...widths),
+      height: Math.max(lineGap, layoutLines.length * lineGap),
+    };
+  };
+  let layout = makeLayout(requestedSize);
+  if (adaptive) {
+    for (let fontSize = requestedSize - 1; fontSize >= minFontSize; fontSize -= 1) {
+      if (layout.width <= maxWidth && layout.height <= fitHeight) break;
+      layout = makeLayout(fontSize);
+    }
+  }
+  const { fontSize: baseSize, lineGap, lines, widths } = layout;
   const totalWidth = Math.max(1, ...widths);
   const totalHeight = Math.max(lineGap, lines.length * lineGap);
   const padding = Math.ceil(baseSize * 0.8) + 24;
@@ -704,6 +732,18 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const y = options.centerY != null
     ? Math.round(options.centerY - source.height / 2)
     : Math.round(topY);
-  blitThemeEffect(ctx, source, theme, x, y, { ...options, hasExplicitColors });
-  return { width: source.width, height: source.height, x, y, lines: lines.length };
+  blitThemeEffect(ctx, source, theme, x, y, {
+    ...options,
+    hasExplicitColors,
+    effectScale: baseSize / requestedSize,
+  });
+  return {
+    width: source.width,
+    height: source.height,
+    x,
+    y,
+    lines: lines.length,
+    fontSize: baseSize,
+    layoutHeight: totalHeight,
+  };
 }

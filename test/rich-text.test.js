@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCanvas } from "@napi-rs/canvas";
-import { parseMathExpression, tokenizeRichText, wrapRichRuns } from "../src/rich-text.js";
+import {
+  drawRichWithTheme,
+  parseMathExpression,
+  tokenizeRichText,
+  wrapRichRuns,
+} from "../src/rich-text.js";
 import { renderImage } from "../src/renderer.js";
 
 test("Markdown syntax becomes styled runs instead of visible punctuation", () => {
@@ -50,6 +55,39 @@ test("rich text wrapping never replaces user text with an ellipsis", () => {
   const rendered = lines.flat().map((run) => run.text).join("");
   assert.equal(rendered, original);
   assert.ok(!rendered.includes("…"));
+});
+
+test("long non-post text scales down to keep about 200 characters in the composition", () => {
+  const ctx = createCanvas(720, 420).getContext("2d");
+  const layout = drawRichWithTheme(ctx, "長".repeat(200), {
+    theme: "plain",
+    mode: "center",
+    cx: 360,
+    centerY: 210,
+    fontSize: 49,
+    maxWidth: 620,
+    maxLines: 3,
+    lineGap: 58,
+  });
+  assert.ok(layout.fontSize < 49);
+  assert.ok(layout.fontSize >= 12);
+  assert.ok(layout.layoutHeight <= 3 * 58);
+});
+
+test("post text keeps its fixed typography when adaptive fitting is disabled", () => {
+  const ctx = createCanvas(720, 420).getContext("2d");
+  const layout = drawRichWithTheme(ctx, "長".repeat(200), {
+    theme: "post",
+    mode: "left",
+    cx: 44,
+    topY: 128,
+    fontSize: 28,
+    maxWidth: 632,
+    maxLines: Number.POSITIVE_INFINITY,
+    lineGap: 40,
+    adaptive: false,
+  });
+  assert.equal(layout.fontSize, 28);
 });
 
 test("the production renderer accepts rich text in Gold and post themes", async () => {

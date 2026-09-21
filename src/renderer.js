@@ -648,12 +648,24 @@ function drawCode(ctx, text, profile) {
   const username = String(profile?.handle || "@you").replace(/^@/, "") || "you";
   const prompt = `C:\\Users\\${username}>`;
   ctx.fillStyle = "#f2f2f2";
-  ctx.font = `400 25px ${MONO}`;
   ctx.textAlign = "left";
   const value = `${prompt}${plainText(text)}`;
-  const lines = wrapText(ctx, value, WIDTH - 64);
-  const lineHeight = 37;
-  const firstY = (HEIGHT - lines.length * lineHeight) / 2 + 27;
+  const maxWidth = WIDTH - 64;
+  const maxHeight = HEIGHT - 64;
+  const requestedSize = 25;
+  const minFontSize = 12;
+  const lineHeightRatio = 37 / requestedSize;
+  let fontSize = requestedSize;
+  let lineHeight = fontSize * lineHeightRatio;
+  let lines;
+  while (fontSize >= minFontSize) {
+    ctx.font = `400 ${fontSize}px ${MONO}`;
+    lines = wrapText(ctx, value, maxWidth);
+    lineHeight = fontSize * lineHeightRatio;
+    if (lines.length * lineHeight <= maxHeight || fontSize === minFontSize) break;
+    fontSize -= 1;
+  }
+  const firstY = (HEIGHT - lines.length * lineHeight) / 2 + fontSize;
   lines.forEach((line, index) => ctx.fillText(line, 32, firstY + index * lineHeight));
 }
 
@@ -780,7 +792,7 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   drawRichWithTheme(ctx, text, {
     theme: "post", mode: "left", cx: 44, topY: 128,
     fontSize: 28, maxWidth: WIDTH - 88, maxLines: Number.POSITIVE_INFINITY,
-    color: "#0f1419", lineGap: 40, seed: text,
+    color: "#0f1419", lineGap: 40, seed: text, adaptive: false,
   });
   const dividerY = HEIGHT - 76;
   ctx.strokeStyle = "#eff3f4";
@@ -812,13 +824,48 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
 }
 
 function drawVertical(ctx, text, options = {}) {
-  const maxRows = options.maxRows || 7;
+  const requestedRows = options.maxRows || 7;
   let chars = Array.from(plainText(text).replace(/\s/g, ""));
   if (!chars.length) chars = [""];
-  const columns = Math.ceil(chars.length / maxRows);
-  const fontSize = options.fontSize || 43;
-  const rowGap = options.rowGap || 47;
-  const columnGap = options.columnGap || 60;
+  const requestedSize = options.fontSize || 43;
+  const requestedRowGap = options.rowGap || 47;
+  const requestedColumnGap = options.columnGap || 60;
+  const fitWidth = options.fitWidth || WIDTH - 96;
+  const fitHeight = options.fitHeight || HEIGHT - 80;
+  const minFontSize = Math.min(requestedSize, options.minFontSize || 12);
+  const dimensions = (fontSize, rows) => {
+    const scale = fontSize / requestedSize;
+    const rowGap = requestedRowGap * scale;
+    const columnGap = requestedColumnGap * scale;
+    const columns = Math.ceil(chars.length / rows);
+    const usedRows = Math.min(rows, chars.length);
+    return {
+      fontSize,
+      rows,
+      columns,
+      rowGap,
+      columnGap,
+      width: Math.max(fontSize, (columns - 1) * columnGap + fontSize),
+      height: Math.max(fontSize, (usedRows - 1) * rowGap + fontSize),
+    };
+  };
+  let layout = dimensions(requestedSize, requestedRows);
+  if (layout.width > fitWidth || layout.height > fitHeight) {
+    for (let fontSize = requestedSize - 1; fontSize >= minFontSize; fontSize -= 1) {
+      const scale = fontSize / requestedSize;
+      const rowGap = requestedRowGap * scale;
+      const rowsByHeight = Math.max(1, Math.floor((fitHeight - fontSize) / rowGap) + 1);
+      layout = dimensions(fontSize, Math.max(requestedRows, rowsByHeight));
+      if (layout.width <= fitWidth && layout.height <= fitHeight) break;
+    }
+  }
+  const {
+    rows: maxRows,
+    columns,
+    fontSize,
+    rowGap,
+    columnGap,
+  } = layout;
   const centerX = options.centerX ?? WIDTH / 2;
   const centerY = options.centerY ?? HEIGHT / 2;
   const right = centerX + ((columns - 1) * columnGap) / 2;
