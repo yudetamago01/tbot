@@ -1,6 +1,14 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
+import {
+  Bookmark,
+  ChartNoAxesColumnIncreasing,
+  Heart,
+  MessageCircle,
+  Repeat2,
+  Share,
+} from "lucide-static";
 import { COMMANDS } from "./commands.js";
 import { zeroMetrics } from "./post-data.js";
 
@@ -10,6 +18,26 @@ const SCALE = 2;
 const SANS = '"TBOT Sans", "Noto Sans CJK JP", "Yu Gothic", sans-serif';
 const SERIF = '"TBOT Serif", "Noto Serif CJK JP", "Yu Mincho", serif';
 const MONO = '"Cascadia Mono", Consolas, "MS Gothic", monospace';
+const SNS_ICON_COLOR = "#536471";
+
+const snsIconSources = {
+  reply: MessageCircle,
+  repost: Repeat2,
+  like: Heart,
+  views: ChartNoAxesColumnIncreasing,
+  bookmark: Bookmark,
+  share: Share,
+};
+
+const snsIcons = Object.fromEntries(await Promise.all(
+  Object.entries(snsIconSources).map(async ([name, svg]) => {
+    const rasterSvg = svg
+      .replaceAll("currentColor", SNS_ICON_COLOR)
+      .replace('width="24"', 'width="96"')
+      .replace('height="24"', 'height="96"');
+    return [name, await loadImage(Buffer.from(rasterSvg))];
+  }),
+));
 
 let fontsRegistered = false;
 const bundledSans = fileURLToPath(new URL("../assets/fonts/NotoSansJP.ttf", import.meta.url));
@@ -533,81 +561,10 @@ function dateLabel(value, timeZone = "Asia/Tokyo") {
   return month && day ? `${month}月${day}日` : "";
 }
 
-function drawSnsIcon(ctx, kind, cx, cy, size = 20, color = "#536471") {
-  const scale = size / 24;
-  ctx.save();
-  ctx.translate(cx - size / 2, cy - size / 2);
-  ctx.scale(scale, scale);
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.8 / scale;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  if (kind === "reply") {
-    ctx.beginPath();
-    ctx.moveTo(20, 11.5);
-    ctx.bezierCurveTo(20, 6.5, 16.5, 3.5, 11.5, 3.5);
-    ctx.bezierCurveTo(6.5, 3.5, 3, 6.6, 3, 11.5);
-    ctx.bezierCurveTo(3, 16.4, 6.7, 19.5, 11.4, 19.5);
-    ctx.lineTo(14.5, 21.5);
-    ctx.lineTo(14.4, 18.9);
-    ctx.bezierCurveTo(17.8, 17.8, 20, 15.2, 20, 11.5);
-    ctx.stroke();
-  } else if (kind === "repost") {
-    ctx.beginPath();
-    ctx.moveTo(5, 8);
-    ctx.lineTo(8, 5);
-    ctx.lineTo(11, 8);
-    ctx.moveTo(8, 5);
-    ctx.lineTo(8, 16);
-    ctx.bezierCurveTo(8, 18, 9, 19, 11, 19);
-    ctx.lineTo(16, 19);
-    ctx.moveTo(19, 16);
-    ctx.lineTo(16, 19);
-    ctx.lineTo(13, 16);
-    ctx.moveTo(16, 19);
-    ctx.lineTo(16, 8);
-    ctx.bezierCurveTo(16, 6, 15, 5, 13, 5);
-    ctx.stroke();
-  } else if (kind === "like") {
-    ctx.beginPath();
-    ctx.moveTo(12, 20.2);
-    ctx.bezierCurveTo(9.7, 18.7, 4, 14.9, 4, 9.3);
-    ctx.bezierCurveTo(4, 5.8, 8.3, 3.6, 12, 7.4);
-    ctx.bezierCurveTo(15.7, 3.6, 20, 5.8, 20, 9.3);
-    ctx.bezierCurveTo(20, 14.9, 14.3, 18.7, 12, 20.2);
-    ctx.stroke();
-  } else if (kind === "views") {
-    ctx.lineWidth = 2.1 / scale;
-    ctx.beginPath();
-    ctx.moveTo(5, 19); ctx.lineTo(5, 13);
-    ctx.moveTo(10, 19); ctx.lineTo(10, 8);
-    ctx.moveTo(15, 19); ctx.lineTo(15, 11);
-    ctx.moveTo(20, 19); ctx.lineTo(20, 4);
-    ctx.stroke();
-  } else if (kind === "bookmark") {
-    ctx.beginPath();
-    ctx.moveTo(7, 4);
-    ctx.lineTo(17, 4);
-    ctx.lineTo(17, 20);
-    ctx.lineTo(12, 16.5);
-    ctx.lineTo(7, 20);
-    ctx.closePath();
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(12, 16);
-    ctx.lineTo(12, 4);
-    ctx.moveTo(8, 8);
-    ctx.lineTo(12, 4);
-    ctx.lineTo(16, 8);
-    ctx.moveTo(6, 13);
-    ctx.lineTo(6, 20);
-    ctx.lineTo(18, 20);
-    ctx.lineTo(18, 13);
-    ctx.stroke();
-  }
-  ctx.restore();
+function drawSnsIcon(ctx, kind, cx, cy, size = 20) {
+  const icon = snsIcons[kind];
+  if (!icon) return;
+  ctx.drawImage(icon, cx - size / 2, cy - size / 2, size, size);
 }
 
 function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
@@ -651,7 +608,7 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   const step = (WIDTH - 128) / (items.length - 1);
   items.forEach(([kind, count], index) => {
     const x = left + index * step;
-    drawSnsIcon(ctx, kind, x, HEIGHT - 46, 20, "#536471");
+    drawSnsIcon(ctx, kind, x, HEIGHT - 46, 20);
     if (count != null) {
       ctx.fillStyle = "#536471";
       ctx.font = `400 14px ${SANS}`;
