@@ -11,6 +11,7 @@ const PENDING_AUTH_TTL_MS = 10 * 60 * 1_000;
 const LEGACY_OAUTH_BASE_URL = "https://karotter.com/api/oauth";
 const OAUTH_BASE_URL = "https://api.karotter.com/api/oauth";
 const ACCOUNT_API_BASE_URL = "https://api.karotter.com/api";
+const ACCOUNT_CLIENT_TYPE = "android";
 
 export class OAuthAuthorizationRequiredError extends Error {
   constructor(message = "Karotter OAuth authorization is required") {
@@ -296,7 +297,7 @@ export class OAuthSession {
       identifier: String(identifier).trim(),
       password: String(password),
       deviceId: this.tokens.deviceId,
-      clientType: "web",
+      clientType: ACCOUNT_CLIENT_TYPE,
       deviceName: "tbot on Render",
     });
     if (body?.twoFactorRequired && body?.twoFactorToken) {
@@ -314,7 +315,7 @@ export class OAuthSession {
       twoFactorToken,
       code: String(code).trim(),
       deviceId: this.tokens.deviceId,
-      clientType: "web",
+      clientType: ACCOUNT_CLIENT_TYPE,
       deviceName: "tbot on Render",
     });
     await this.storeAccountTokens(body);
@@ -325,7 +326,7 @@ export class OAuthSession {
     const body = await this.accountRequest("/auth/refresh-token", {
       refreshToken: this.tokens.refreshToken,
       deviceId: this.tokens.deviceId,
-      clientType: "web",
+      clientType: ACCOUNT_CLIENT_TYPE,
       deviceName: "tbot on Render",
     });
     await this.storeAccountTokens(body);
@@ -355,7 +356,7 @@ export class OAuthSession {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-client-type": "web",
+          "x-client-type": ACCOUNT_CLIENT_TYPE,
           "x-device-id": this.tokens.deviceId,
         },
         body: JSON.stringify(payload),

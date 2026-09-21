@@ -89,7 +89,7 @@ test("account mode uses the first-party API paths and session headers", async ()
 
   assert.equal(requests[0].url, "https://api.karotter.com/api/auth/me");
   assert.equal(requests[0].options.headers.Authorization, "Bearer account-access-token");
-  assert.equal(requests[0].options.headers["x-client-type"], "web");
+  assert.equal(requests[0].options.headers["x-client-type"], "android");
   assert.equal(requests[0].options.headers["x-device-id"], "device-id");
   const notificationUrl = new URL(requests[1].url);
   assert.equal(notificationUrl.pathname, "/api/notifications");

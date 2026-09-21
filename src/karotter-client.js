@@ -50,7 +50,7 @@ export class KarotterClient {
       const token = await this.tokenProvider();
       const headers = { Authorization: `Bearer ${token}` };
       if (this.authMode === "account") {
-        headers["x-client-type"] = "web";
+        headers["x-client-type"] = "android";
         headers["x-device-id"] = this.deviceIdProvider();
       }
       return headers;

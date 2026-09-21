@@ -131,7 +131,7 @@ test("Karotter account login stores tokens without persisting credentials", asyn
     identifier: "tbot",
     password: "secret-password",
     deviceId: session.tokens.deviceId,
-    clientType: "web",
+    clientType: "android",
     deviceName: "tbot on Render",
   });
   assert.equal(await session.getAccessToken(), "account-access-token");
@@ -165,6 +165,7 @@ test("Karotter account two-factor login and refresh use the account API", async 
   assert.equal(requests[1].body.code, "123456");
   assert.equal(requests[2].url, "https://api.karotter.com/api/auth/refresh-token");
   assert.equal(requests[2].body.refreshToken, "refresh-token");
+  assert.equal(requests[2].body.clientType, "android");
 });
 
 test("OAuth callback rejects a mismatched state without contacting Karotter", async () => {

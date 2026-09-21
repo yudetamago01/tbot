@@ -20,14 +20,44 @@ const oauthSession = new Set(["oauth", "account"]).has(config.authMode)
     })
   : null;
 await oauthSession?.load();
+let accountReloginPromise = null;
+
+async function loginAccount({ renewal = false } = {}) {
+  const login = await oauthSession.loginWithPassword(config.account);
+  if (login.twoFactorRequired) {
+    throw new Error("Karotter account requires two-factor authentication");
+  }
+  logger.info(renewal
+    ? "karotter_account_session_renewed"
+    : "karotter_account_auto_login_succeeded");
+  return oauthSession.getAccessToken();
+}
+
+async function getAccountAccessToken() {
+  try {
+    return await oauthSession.getAccessToken();
+  } catch (error) {
+    if (!config.account.identifier || !config.account.password) throw error;
+    if (!accountReloginPromise) {
+      logger.warn("karotter_account_session_renewal_started", { reason: error.message });
+      accountReloginPromise = loginAccount({ renewal: true })
+        .catch((renewalError) => {
+          logger.error("karotter_account_session_renewal_failed", {
+            error: renewalError.message,
+          });
+          throw renewalError;
+        })
+        .finally(() => {
+          accountReloginPromise = null;
+        });
+    }
+    return accountReloginPromise;
+  }
+}
+
 if (config.authMode === "account" && config.account.identifier && config.account.password) {
   try {
-    const login = await oauthSession.loginWithPassword(config.account);
-    if (login.twoFactorRequired) {
-      logger.warn("karotter_account_auto_login_requires_2fa");
-    } else {
-      logger.info("karotter_account_auto_login_succeeded");
-    }
+    await loginAccount();
   } catch (error) {
     logger.warn("karotter_account_auto_login_failed", { error: error.message });
   }
@@ -38,7 +68,11 @@ const client = new KarotterClient({
   baseUrl: config.baseUrl,
   timeoutMs: config.httpTimeoutMs,
   requestsPerMinute: config.requestsPerMinute,
-  tokenProvider: oauthSession ? () => oauthSession.getAccessToken() : undefined,
+  tokenProvider: oauthSession
+    ? config.authMode === "account"
+      ? getAccountAccessToken
+      : () => oauthSession.getAccessToken()
+    : undefined,
   deviceIdProvider: oauthSession ? () => oauthSession.getDeviceId() : undefined,
 });
 const stateStore = new StateStore(config.statePath, logger);
