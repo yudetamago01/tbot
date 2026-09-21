@@ -1,4 +1,5 @@
 import { mkdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const fonts = [
@@ -9,6 +10,10 @@ const fonts = [
   {
     name: "NotoSerifJP.ttf",
     url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifjp/NotoSerifJP%5Bwght%5D.ttf",
+  },
+  {
+    name: "NotoColorEmoji.ttf",
+    url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notocoloremoji/NotoColorEmoji-Regular.ttf",
   },
 ];
 
@@ -37,12 +42,23 @@ async function downloadFont(font) {
     process.stdout.write(`Using cached ${font.name}\n`);
     return;
   }
-  const response = await fetch(font.url, {
-    headers: { "user-agent": "karotter-tbot-render-build/1.0" },
-    signal: AbortSignal.timeout(120_000),
-  });
-  if (!response.ok) throw new Error(`Failed to download ${font.name}: HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  let bytes;
+  let lastError;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const response = await fetch(font.url, {
+        headers: { "user-agent": "karotter-tbot-render-build/1.0" },
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      bytes = new Uint8Array(await response.arrayBuffer());
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 4) await delay(attempt * 1_500);
+    }
+  }
+  if (!bytes) throw new Error(`Failed to download ${font.name} after retries`, { cause: lastError });
   if (bytes.byteLength < minFontBytes || bytes.byteLength > maxFontBytes || !hasTrueTypeSignature(bytes)) {
     throw new Error(`Downloaded ${font.name} is not a valid expected font file`);
   }

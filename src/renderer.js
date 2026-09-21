@@ -16,9 +16,10 @@ import { drawRichWithTheme } from "./rich-text.js";
 const WIDTH = 720;
 const HEIGHT = 420;
 const SCALE = 2;
-const SANS = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", sans-serif';
-const SERIF = '"Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, serif';
-const MONO = '"Cascadia Mono", Consolas, "MS Gothic", monospace';
+const EMOJI = '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"';
+const SANS = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", ${EMOJI}, sans-serif`;
+const SERIF = `"Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, ${EMOJI}, serif`;
+const MONO = `"Cascadia Mono", Consolas, "MS Gothic", ${EMOJI}, monospace`;
 const SNS_ICON_COLOR = "#536471";
 
 const snsIconSources = {
@@ -43,6 +44,7 @@ const snsIcons = Object.fromEntries(await Promise.all(
 let fontsRegistered = false;
 const bundledSans = fileURLToPath(new URL("../assets/fonts/NotoSansJP.ttf", import.meta.url));
 const bundledSerif = fileURLToPath(new URL("../assets/fonts/NotoSerifJP.ttf", import.meta.url));
+const bundledEmoji = fileURLToPath(new URL("../assets/fonts/NotoColorEmoji.ttf", import.meta.url));
 
 function registerFonts() {
   if (fontsRegistered) return;
@@ -52,10 +54,13 @@ function registerFonts() {
     ["Noto Serif JP", process.env.TBOT_FONT_SERIF],
     ["Noto Sans JP", bundledSans],
     ["Noto Serif JP", bundledSerif],
+    ["Noto Color Emoji", process.env.TBOT_FONT_EMOJI],
+    ["Noto Color Emoji", bundledEmoji],
     ["Noto Sans JP", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"],
     ["Noto Serif JP", "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"],
     ["Yu Gothic UI", "C:\\Windows\\Fonts\\YuGothM.ttc"],
     ["Yu Mincho", "C:\\Windows\\Fonts\\yumin.ttf"],
+    ["Segoe UI Emoji", "C:\\Windows\\Fonts\\seguiemj.ttf"],
   ];
   for (const [family, file] of candidates) {
     if (!file || !existsSync(file)) continue;
@@ -119,27 +124,26 @@ function speechBubblePath(ctx, x, y, width, height, radius, tailX, tailWidth, ta
   ctx.closePath();
 }
 
-function wrapText(ctx, value, maxWidth, maxLines = 4) {
+function wrapText(ctx, value, maxWidth) {
   const chars = Array.from(plainText(value));
   const lines = [];
   let current = "";
   for (const char of chars) {
+    if (char === "\n") {
+      lines.push(current);
+      current = "";
+      continue;
+    }
     const candidate = current + char;
     if (current && ctx.measureText(candidate).width > maxWidth) {
       lines.push(current);
       current = char;
-      if (lines.length === maxLines) break;
     } else {
       current = candidate;
     }
   }
-  if (lines.length < maxLines && current) lines.push(current);
-  if (lines.join("").length < chars.length && lines.length) {
-    let tail = lines.at(-1);
-    while (tail && ctx.measureText(`${tail}…`).width > maxWidth) tail = tail.slice(0, -1);
-    lines[lines.length - 1] = `${tail}…`;
-  }
-  return lines.length ? lines : ["…"];
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
 function drawTextBlock(ctx, value, options = {}) {
@@ -152,8 +156,8 @@ function drawTextBlock(ctx, value, options = {}) {
   let lines;
   while (fontSize >= minFontSize) {
     ctx.font = `${weight} ${fontSize}px ${family}`;
-    lines = wrapText(ctx, value, maxWidth, maxLines);
-    const consumed = lines.join("").replace(/…$/, "").length;
+    lines = wrapText(ctx, value, maxWidth);
+    const consumed = lines.join("").length;
     if (consumed >= plainText(value).length || fontSize <= minFontSize) break;
     fontSize -= 2;
   }
@@ -647,7 +651,7 @@ function drawCode(ctx, text, profile) {
   ctx.font = `400 25px ${MONO}`;
   ctx.textAlign = "left";
   const value = `${prompt}${plainText(text)}`;
-  const lines = wrapText(ctx, value, WIDTH - 64, 6);
+  const lines = wrapText(ctx, value, WIDTH - 64);
   const lineHeight = 37;
   const firstY = (HEIGHT - lines.length * lineHeight) / 2 + 27;
   lines.forEach((line, index) => ctx.fillText(line, 32, firstY + index * lineHeight));
@@ -809,11 +813,8 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
 
 function drawVertical(ctx, text, options = {}) {
   const maxRows = options.maxRows || 7;
-  const maxColumns = options.maxColumns || 6;
   let chars = Array.from(plainText(text).replace(/\s/g, ""));
-  const limit = maxRows * maxColumns;
-  if (chars.length > limit) chars = chars.slice(0, limit - 1).concat("…");
-  if (!chars.length) chars = ["…"];
+  if (!chars.length) chars = [""];
   const columns = Math.ceil(chars.length / maxRows);
   const fontSize = options.fontSize || 43;
   const rowGap = options.rowGap || 47;

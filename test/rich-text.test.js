@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseMathExpression, tokenizeRichText } from "../src/rich-text.js";
+import { createCanvas } from "@napi-rs/canvas";
+import { parseMathExpression, tokenizeRichText, wrapRichRuns } from "../src/rich-text.js";
 import { renderImage } from "../src/renderer.js";
 
 test("Markdown syntax becomes styled runs instead of visible punctuation", () => {
@@ -31,7 +32,7 @@ test("inline and display math become math runs", () => {
 });
 
 test("the offline TeX parser supports fractions, roots, scripts, Greek, and operators", () => {
-  const tokens = parseMathExpression("\\frac{1}{2}+\\sqrt{x}+x_i^2+\\alpha\\times\\infty");
+  const tokens = parseMathExpression("\\frac{1}{2}+\\sqrt{x}+x_i^2+\\alpha\\times\\infty+\\color{#7c83ff}{焦らない}");
   assert.ok(tokens.some((token) => token.type === "frac"));
   assert.ok(tokens.some((token) => token.type === "sqrt"));
   assert.ok(tokens.some((token) => token.type === "sub"));
@@ -39,6 +40,16 @@ test("the offline TeX parser supports fractions, roots, scripts, Greek, and oper
   assert.ok(tokens.some((token) => token.type === "char" && token.ch === "α"));
   assert.ok(tokens.some((token) => token.type === "char" && token.ch === "×"));
   assert.ok(tokens.some((token) => token.type === "char" && token.ch === "∞"));
+  assert.ok(tokens.some((token) => token.type === "color" && token.color === "#7c83ff" && token.body === "焦らない"));
+});
+
+test("rich text wrapping never replaces user text with an ellipsis", () => {
+  const ctx = createCanvas(200, 200).getContext("2d");
+  const original = "とても長い文章でも一文字も省略しない";
+  const lines = wrapRichRuns(ctx, tokenizeRichText(original), 48, 24, "Noto Sans JP");
+  const rendered = lines.flat().map((run) => run.text).join("");
+  assert.equal(rendered, original);
+  assert.ok(!rendered.includes("…"));
 });
 
 test("the production renderer accepts rich text in Gold and post themes", async () => {
@@ -57,4 +68,11 @@ test("the exact single-tilde Gold input is rendered as markup", async () => {
   assert.ok(png.length > 10_000);
   const runs = tokenizeRichText("~あ~");
   assert.deepEqual(runs.map(({ text, strike }) => ({ text, strike })), [{ text: "あ", strike: true }]);
+});
+
+test("Gold renders emoji and KaTeX color input without rejecting it", async () => {
+  const text = "🌃夜のメモ\n$\\color{#7c83ff}{焦らなくていい}$";
+  assert.equal(tokenizeRichText(text).some((run) => run.text.includes("🌃")), true);
+  const png = await renderImage({ commandId: "gold", text, profile: { handle: "@test" } });
+  assert.ok(png.length > 10_000);
 });

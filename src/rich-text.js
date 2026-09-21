@@ -1,8 +1,9 @@
 import { createCanvas } from "@napi-rs/canvas";
 
-const DEFAULT_FAMILY = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", sans-serif';
-const CODE_FAMILY = '"Cascadia Mono", Consolas, "MS Gothic", monospace';
-const MATH_FAMILY = '"Cambria Math", "Times New Roman", "Yu Mincho", "Noto Serif JP", serif';
+const EMOJI_FAMILY = '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"';
+const DEFAULT_FAMILY = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", ${EMOJI_FAMILY}, sans-serif`;
+const CODE_FAMILY = `"Cascadia Mono", Consolas, "MS Gothic", ${EMOJI_FAMILY}, monospace`;
+const MATH_FAMILY = `"Cambria Math", "Times New Roman", "Yu Mincho", "Noto Serif JP", ${EMOJI_FAMILY}, serif`;
 
 const MATH_GREEK = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε",
@@ -65,6 +66,15 @@ function parseMathToken(source, index) {
       const group = readMathGroup(source, cursor);
       return [{ type: "sqrt", body: group.body }, group.next];
     }
+    if (name === "color" || name === "textcolor") {
+      const colorGroup = readMathGroup(source, cursor);
+      const bodyStart = colorGroup.next;
+      const groupedBody = readMathGroup(source, bodyStart);
+      const hasExplicitBody = source.slice(bodyStart).trimStart().startsWith("{");
+      const body = hasExplicitBody ? groupedBody.body : source.slice(bodyStart).trim();
+      const next = hasExplicitBody ? groupedBody.next : source.length;
+      return [{ type: "color", color: safeMathColor(colorGroup.body), body }, next];
+    }
     if (["text", "mathrm", "operatorname"].includes(name)) {
       const group = readMathGroup(source, cursor);
       return [{ type: "text", body: group.body, bold: false }, group.next];
@@ -86,6 +96,16 @@ function parseMathToken(source, index) {
   }
   const style = /[A-Za-z]/.test(source[index]) ? "italic" : /[0-9]/.test(source[index]) ? "num" : "op";
   return [{ type: "char", ch: source[index], style }, index + 1];
+}
+
+function safeMathColor(value) {
+  const color = String(value || "").trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(color)) return color;
+  const named = new Set([
+    "black", "white", "red", "orange", "yellow", "green", "blue", "purple", "pink",
+    "gray", "grey", "cyan", "magenta", "brown", "teal", "navy", "lime",
+  ]);
+  return named.has(color.toLowerCase()) ? color.toLowerCase() : "#0f1419";
 }
 
 export function parseMathExpression(value) {
@@ -247,7 +267,7 @@ export function tokenizeRichText(value) {
     index += 1;
   }
   push();
-  return runs.length ? runs : [{ text: "…", ...style }];
+  return runs.length ? runs : [{ text: "", ...style }];
 }
 
 function richFontFor(run, baseSize, family) {
@@ -267,6 +287,10 @@ function measureMath(ctx, tokens, size) {
     } else if (token.type === "text") {
       ctx.font = `${token.bold ? 700 : 500} ${size}px ${DEFAULT_FAMILY}`;
       width += ctx.measureText(token.body).width;
+    } else if (token.type === "color") {
+      const measured = measureMath(ctx, parseMathExpression(token.body), size);
+      width += measured.width;
+      height = Math.max(height, measured.height);
     } else if (token.type === "sup" || token.type === "sub") {
       const measured = measureMath(ctx, parseMathExpression(token.body), size * 0.7);
       width += measured.width + 2;
@@ -294,6 +318,8 @@ function drawMathTokens(ctx, tokens, x, y, size, color) {
       ctx.font = `${token.bold ? 700 : 500} ${size}px ${DEFAULT_FAMILY}`;
       ctx.fillText(token.body, cursor, y);
       cursor += ctx.measureText(token.body).width;
+    } else if (token.type === "color") {
+      cursor += drawMathTokens(ctx, parseMathExpression(token.body), cursor, y, size, token.color || color);
     } else if (token.type === "sup" || token.type === "sub") {
       const inner = parseMathExpression(token.body);
       const subSize = size * 0.7;
@@ -364,7 +390,7 @@ function drawRun(ctx, run, x, y, baseSize, family, defaultColor) {
   return width;
 }
 
-function wrapRichRuns(ctx, runs, maxWidth, baseSize, family, maxLines) {
+export function wrapRichRuns(ctx, runs, maxWidth, baseSize, family) {
   const lines = [];
   let line = [];
   let lineWidth = 0;
@@ -374,6 +400,13 @@ function wrapRichRuns(ctx, runs, maxWidth, baseSize, family, maxLines) {
     lineWidth = 0;
   };
   for (const run of runs) {
+    if (run.math) {
+      const runWidth = measureRun(ctx, run, baseSize, family).width;
+      if (line.length && lineWidth + runWidth > maxWidth) pushLine();
+      line.push(run);
+      lineWidth += runWidth;
+      continue;
+    }
     for (const piece of String(run.text || "").split(/(\n)/)) {
       if (piece === "\n") {
         pushLine(true);
@@ -399,16 +432,7 @@ function wrapRichRuns(ctx, runs, maxWidth, baseSize, family, maxLines) {
     }
   }
   if (line.length) pushLine();
-  if (!lines.length) lines.push([{ text: "…", bold: false, size: 1 }]);
-  if (Number.isFinite(maxLines) && lines.length > maxLines) {
-    const limited = lines.slice(0, maxLines);
-    const last = limited.at(-1);
-    if (last?.length) {
-      const tail = last.at(-1);
-      last[last.length - 1] = { ...tail, text: `${String(tail.text).slice(0, -1)}…` };
-    }
-    return limited;
-  }
+  if (!lines.length) lines.push([{ text: "", bold: false, size: 1 }]);
   return lines;
 }
 
@@ -548,6 +572,11 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
     drawMaskOutline(ctx, source, x, y, 1.5, "#fbfdff", 18, 0.9);
     ctx.globalCompositeOperation = "screen";
     ctx.drawImage(gradientTintCanvas(source, [[0, "#ffffff"], [0.48, "#a5f3fc"], [1, "#ffffff"]], true), x, y);
+    if (options.hasExplicitColors) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 0.82;
+      ctx.drawImage(source, x, y);
+    }
   } else if (theme === "gold") {
     drawSoftMask(ctx, source, x, y, "#ffca3a", 18, 0.34, 0, 4);
     drawMaskOutline(ctx, source, x + 5, y + 6, 4, "#5a2f00", 28, 0.76);
@@ -561,6 +590,11 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
     ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = 0.55;
     ctx.drawImage(tint("#fff8cf"), x - 1, y - 2);
+    if (options.hasExplicitColors) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 0.82;
+      ctx.drawImage(source, x, y);
+    }
   } else if (theme === "glitch") {
     drawSoftMask(ctx, source, x, y, "#ff1744", 8, 0.17, -3, 0);
     ctx.globalCompositeOperation = "screen";
@@ -596,12 +630,21 @@ function blitThemeEffect(ctx, source, theme, x, y, options) {
     drawMaskOutline(ctx, source, x, y + 2, 5, "rgba(25,17,37,0.72)", 30, 0.82);
     drawMaskOutline(ctx, source, x, y, 2.5, "#ffffff", 24, 0.98);
     ctx.drawImage(gradientTintCanvas(source, [[0, "#ff0033"], [0.16, "#ff6600"], [0.33, "#ffcc00"], [0.5, "#33ff66"], [0.67, "#00ccff"], [0.84, "#3366ff"], [1, "#cc33ff"]], true), x, y);
+    if (options.hasExplicitColors) {
+      ctx.globalAlpha = 0.86;
+      ctx.drawImage(source, x, y);
+    }
   } else if (theme === "stamp") {
     const ink = distressCanvas(tint("#a30f21"), `${seed}:ink`, 0.0024);
     ctx.globalCompositeOperation = "multiply";
     drawMaskOutline(ctx, ink, x + 2, y + 3, 2.4, "rgba(77,5,15,0.65)", 20, 0.65);
     ctx.globalAlpha = 0.96;
     ctx.drawImage(ink, x, y);
+    if (options.hasExplicitColors) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 0.84;
+      ctx.drawImage(source, x, y);
+    }
   } else if (theme === "sticker") {
     drawSoftMask(ctx, source, x, y, "#27345f", 12, 0.24, 0, 10);
     drawMaskOutline(ctx, source, x, y, 12, "#ffffff", 56, 1);
@@ -621,13 +664,17 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const family = options.family || DEFAULT_FAMILY;
   const baseSize = options.fontSize || 40;
   const maxWidth = options.maxWidth || 520;
-  const maxLines = options.maxLines ?? 3;
+  // User-authored text is never shortened. If it exceeds the composition,
+  // it is still painted and allowed to cross the theme's visual bounds.
   const defaultColor = options.color || "#0f1419";
   const mode = options.mode || "center";
   const centerX = options.cx ?? 360;
   const topY = options.topY ?? 160;
   const lineGap = options.lineGap || baseSize * 1.35;
   const runs = tokenizeRichText(value);
+  const hasExplicitColors = runs.some(
+    (run) => run.color || (run.math && /\\(?:color|textcolor)\b/.test(run.text)),
+  );
   const displayThemes = new Set(["neon", "gold", "glitch", "pixel", "stamp", "banner", "rainbow", "sticker", "speech"]);
   if (displayThemes.has(theme)) {
     runs.forEach((run) => {
@@ -635,7 +682,7 @@ export function drawRichWithTheme(ctx, value, options = {}) {
     });
   }
 
-  const lines = wrapRichRuns(ctx, runs, maxWidth, baseSize, family, maxLines);
+  const lines = wrapRichRuns(ctx, runs, maxWidth, baseSize, family);
   const widths = lines.map((line) => line.reduce((sum, run) => sum + measureRun(ctx, run, baseSize, family).width, 0));
   const totalWidth = Math.max(1, ...widths);
   const totalHeight = Math.max(lineGap, lines.length * lineGap);
@@ -657,6 +704,6 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const y = options.centerY != null
     ? Math.round(options.centerY - source.height / 2)
     : Math.round(topY);
-  blitThemeEffect(ctx, source, theme, x, y, options);
+  blitThemeEffect(ctx, source, theme, x, y, { ...options, hasExplicitColors });
   return { width: source.width, height: source.height, x, y, lines: lines.length };
 }
