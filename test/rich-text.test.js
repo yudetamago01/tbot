@@ -7,7 +7,7 @@ import {
   tokenizeRichText,
   wrapRichRuns,
 } from "../src/rich-text.js";
-import { renderImage } from "../src/renderer.js";
+import { renderImage, verticalGlyphRotation } from "../src/renderer.js";
 
 test("Markdown syntax becomes styled runs instead of visible punctuation", () => {
   const runs = tokenizeRichText("# 見出し\n**太字** *斜体* ~~取消~~ `code` [link](https://example.com)");
@@ -72,6 +72,27 @@ test("long non-post text scales down to keep about 200 characters in the composi
   assert.ok(layout.fontSize < 49);
   assert.ok(layout.fontSize >= 12);
   assert.ok(layout.layoutHeight <= 3 * 58 * 1.08 * 1.12);
+});
+
+test("short non-post text keeps the configured normal size", () => {
+  const ctx = createCanvas(720, 420).getContext("2d");
+  const layout = drawRichWithTheme(ctx, "通常サイズ", {
+    theme: "plain",
+    mode: "center",
+    cx: 360,
+    centerY: 210,
+    fontSize: 49,
+    maxWidth: 620,
+    maxLines: 3,
+    lineGap: 58,
+  });
+  assert.equal(layout.fontSize, 49);
+});
+
+test("vertical prolonged sound marks rotate with the writing direction", () => {
+  assert.equal(verticalGlyphRotation("ー"), Math.PI / 2);
+  assert.equal(verticalGlyphRotation("ｰ"), Math.PI / 2);
+  assert.equal(verticalGlyphRotation("あ"), 0);
 });
 
 test("post text keeps its fixed typography when adaptive fitting is disabled", () => {

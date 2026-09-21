@@ -906,7 +906,7 @@ function drawVertical(ctx, text, options = {}) {
     const y = top + row * rowGap + columnOffsets[column] + (random() - 0.5) * jitter;
     const sizeJitter = options.sizeJitter || 0;
     const glyphSize = fontSize * (1 + (random() - 0.5) * sizeJitter);
-    const rotation = (random() - 0.5) * (options.rotationJitter || 0);
+    const rotation = verticalGlyphRotation(char) + (random() - 0.5) * (options.rotationJitter || 0);
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rotation);
@@ -925,6 +925,12 @@ function drawVertical(ctx, text, options = {}) {
   };
 }
 
+const VERTICAL_ROTATED_GLYPHS = new Set(["ー", "ｰ", "―", "—", "–", "−"]);
+
+export function verticalGlyphRotation(character) {
+  return VERTICAL_ROTATED_GLYPHS.has(character) ? Math.PI / 2 : 0;
+}
+
 function drawPoem(ctx, text) {
   const paper = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
   paper.addColorStop(0, "#f7f3e9");
@@ -935,7 +941,7 @@ function drawPoem(ctx, text) {
   paperTexture(ctx, `poem:${text}`, { alpha: 0.022, specks: 760 });
   const length = Array.from(plainText(text).replace(/\s/g, "")).length;
   const short = length <= 30;
-  const fontSize = length <= 10 ? 76 : length <= 20 ? 62 : length <= 30 ? 52 : 44;
+  const fontSize = 43;
   const maxRows = short
     ? Math.max(3, Math.min(5, Math.ceil(Math.sqrt(Math.max(1, length)))))
     : 7;
