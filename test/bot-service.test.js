@@ -121,3 +121,24 @@ test("a poll discards pre-start notifications without delaying new ones", async 
   assert.equal(service.status.ignored, 1);
   assert.equal(service.status.processed, 1);
 });
+
+test("health exposes only public bot identity fields", () => {
+  const { service } = fixture();
+  service.status.botUser = {
+    id: 42433,
+    username: "tbot",
+    displayName: "textbot",
+    avatarUrl: "/avatar.webp",
+    isBotAccount: true,
+    email: "private@example.com",
+    birthday: "2011-05-31",
+  };
+
+  assert.deepEqual(service.health().botUser, {
+    id: 42433,
+    username: "tbot",
+    displayName: "textbot",
+    avatarUrl: "/avatar.webp",
+    isBotAccount: true,
+  });
+});

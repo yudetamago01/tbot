@@ -262,12 +262,22 @@ export class BotService {
   }
 
   health() {
+    const botUser = this.status.botUser
+      ? {
+          id: this.status.botUser.id,
+          username: this.status.botUser.username,
+          displayName: this.status.botUser.displayName,
+          avatarUrl: this.status.botUser.avatarUrl,
+          isBotAccount: this.status.botUser.isBotAccount,
+        }
+      : null;
     return {
       ok: Boolean(this.status.botUser) && !this.status.lastError,
       polling: this.config.enablePolling && Boolean(this.status.botUser) && !this.stopped,
       running: this.running,
       username: this.config.username,
       ...this.status,
+      botUser,
     };
   }
 }
