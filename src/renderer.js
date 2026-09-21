@@ -15,8 +15,8 @@ import { zeroMetrics } from "./post-data.js";
 const WIDTH = 720;
 const HEIGHT = 420;
 const SCALE = 2;
-const SANS = '"TBOT Sans", "Noto Sans CJK JP", "Yu Gothic", sans-serif';
-const SERIF = '"TBOT Serif", "Noto Serif CJK JP", "Yu Mincho", serif';
+const SANS = '"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", sans-serif';
+const SERIF = '"Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, serif';
 const MONO = '"Cascadia Mono", Consolas, "MS Gothic", monospace';
 const SNS_ICON_COLOR = "#536471";
 
@@ -47,14 +47,14 @@ function registerFonts() {
   if (fontsRegistered) return;
   fontsRegistered = true;
   const candidates = [
-    ["TBOT Sans", process.env.TBOT_FONT_SANS],
-    ["TBOT Serif", process.env.TBOT_FONT_SERIF],
-    ["TBOT Sans", bundledSans],
-    ["TBOT Serif", bundledSerif],
-    ["TBOT Sans", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"],
-    ["TBOT Serif", "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"],
-    ["TBOT Sans", "C:\\Windows\\Fonts\\YuGothM.ttc"],
-    ["TBOT Serif", "C:\\Windows\\Fonts\\yumin.ttf"],
+    ["Noto Sans JP", process.env.TBOT_FONT_SANS],
+    ["Noto Serif JP", process.env.TBOT_FONT_SERIF],
+    ["Noto Sans JP", bundledSans],
+    ["Noto Serif JP", bundledSerif],
+    ["Noto Sans JP", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"],
+    ["Noto Serif JP", "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc"],
+    ["Yu Gothic UI", "C:\\Windows\\Fonts\\YuGothM.ttc"],
+    ["Yu Mincho", "C:\\Windows\\Fonts\\yumin.ttf"],
   ];
   for (const [family, file] of candidates) {
     if (!file || !existsSync(file)) continue;
@@ -592,12 +592,13 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   drawTextBlock(ctx, text, {
     x: 44,
     align: "left",
-    topY: 132,
+    topY: 128,
     fontSize: 28,
     maxWidth: WIDTH - 88,
     allowOverflow: true,
+    lineHeight: 40,
     color: "#0f1419",
-    weight: 700,
+    weight: 600,
   });
   const dividerY = HEIGHT - 76;
   ctx.strokeStyle = "#eff3f4";
