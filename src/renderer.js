@@ -132,13 +132,14 @@ function drawTextBlock(ctx, value, options = {}) {
   let fontSize = options.fontSize || 44;
   const weight = options.weight || 700;
   const maxWidth = options.maxWidth || 560;
-  const maxLines = options.maxLines || 4;
+  const maxLines = options.allowOverflow ? Number.POSITIVE_INFINITY : options.maxLines || 4;
+  const minFontSize = options.allowOverflow ? fontSize : options.minFontSize || 22;
   let lines;
-  while (fontSize >= (options.minFontSize || 22)) {
+  while (fontSize >= minFontSize) {
     ctx.font = `${weight} ${fontSize}px ${family}`;
     lines = wrapText(ctx, value, maxWidth, maxLines);
     const consumed = lines.join("").replace(/…$/, "").length;
-    if (consumed >= plainText(value).length || fontSize <= (options.minFontSize || 22)) break;
+    if (consumed >= plainText(value).length || fontSize <= minFontSize) break;
     fontSize -= 2;
   }
   const lineHeight = options.lineHeight || fontSize * 1.32;
@@ -588,7 +589,16 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   ctx.fillText(handle, mx + nameWidth + 10, 56);
   const handleWidth = ctx.measureText(handle).width;
   ctx.fillText(`· ${dateLabel(post?.createdAt, timeZone)}`, mx + nameWidth + handleWidth + 20, 56);
-  drawTextBlock(ctx, text, { x: 44, align: "left", topY: 132, fontSize: 28, maxWidth: WIDTH - 88, maxLines: 4, color: "#0f1419", weight: 500 });
+  drawTextBlock(ctx, text, {
+    x: 44,
+    align: "left",
+    topY: 132,
+    fontSize: 28,
+    maxWidth: WIDTH - 88,
+    allowOverflow: true,
+    color: "#0f1419",
+    weight: 700,
+  });
   const dividerY = HEIGHT - 76;
   ctx.strokeStyle = "#eff3f4";
   ctx.lineWidth = 1;
