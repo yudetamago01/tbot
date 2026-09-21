@@ -11,6 +11,7 @@ import {
 } from "lucide-static";
 import { COMMANDS } from "./commands.js";
 import { zeroMetrics } from "./post-data.js";
+import { drawRichWithTheme } from "./rich-text.js";
 
 const WIDTH = 720;
 const HEIGHT = 420;
@@ -101,6 +102,20 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.arcTo(x + width, y + height, x, y + height, r);
   ctx.arcTo(x, y + height, x, y, r);
   ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function speechBubblePath(ctx, x, y, width, height, radius, tailX, tailWidth, tailHeight) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
+  ctx.lineTo(tailX + tailWidth, y + height);
+  ctx.lineTo(tailX + tailWidth * 0.42, y + height + tailHeight);
+  ctx.lineTo(tailX, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.arcTo(x, y + height, x, y + height - radius, radius);
+  ctx.arcTo(x, y, x + radius, y, radius);
   ctx.closePath();
 }
 
@@ -201,6 +216,28 @@ function vignette(ctx, alpha = 0.38) {
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 }
 
+function drawSpark(ctx, x, y, radius, color = "#fff", alpha = 1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = alpha;
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+  glow.addColorStop(0, color);
+  glow.addColorStop(0.18, color);
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(1, radius * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(-radius * 1.5, 0);
+  ctx.lineTo(radius * 1.5, 0);
+  ctx.moveTo(0, -radius * 1.5);
+  ctx.lineTo(0, radius * 1.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function profileColors(handle) {
   const palettes = [
     ["#ff8a4c", "#ff5c1a"],
@@ -298,22 +335,57 @@ function drawQuote(ctx, text) {
   ctx.fillRect(40, 61, 36, 3);
   ctx.fillStyle = "rgba(34,32,29,0.18)";
   ctx.fillRect(88, 62, WIDTH - 128, 1);
-  drawTextBlock(ctx, text, { family: SERIF, fontSize: 42, maxWidth: 584, maxLines: 4, color: "#201f1c" });
+  drawRichWithTheme(ctx, text, {
+    theme: "quote", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2 + 8,
+    family: SERIF, fontSize: 42, maxWidth: 584, maxLines: 4,
+    color: "#201f1c", lineGap: 56, seed: text,
+  });
 }
 
 function drawFancy(ctx, text) {
-  const background = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-  background.addColorStop(0, "#10131b");
-  background.addColorStop(0.55, "#222638");
-  background.addColorStop(1, "#10131b");
+  const background = ctx.createLinearGradient(0, HEIGHT, WIDTH, 0);
+  background.addColorStop(0, "#11182e");
+  background.addColorStop(0.5, "#202348");
+  background.addColorStop(1, "#431f45");
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  ctx.strokeStyle = "rgba(232,207,154,0.48)";
+
+  const bloomA = ctx.createRadialGradient(WIDTH * 0.18, HEIGHT * 0.18, 0, WIDTH * 0.18, HEIGHT * 0.18, 300);
+  bloomA.addColorStop(0, "rgba(81,194,255,0.24)");
+  bloomA.addColorStop(1, "rgba(81,194,255,0)");
+  ctx.fillStyle = bloomA;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  const bloomB = ctx.createRadialGradient(WIDTH * 0.82, HEIGHT * 0.78, 0, WIDTH * 0.82, HEIGHT * 0.78, 300);
+  bloomB.addColorStop(0, "rgba(255,121,167,0.2)");
+  bloomB.addColorStop(1, "rgba(255,121,167,0)");
+  ctx.fillStyle = bloomB;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  ctx.save();
+  ctx.translate(WIDTH * 0.82, HEIGHT * 0.5);
+  ctx.rotate(0.28);
+  ctx.strokeStyle = "rgba(255,225,190,0.18)";
+  for (let index = 0; index < 4; index += 1) {
+    ctx.lineWidth = index === 0 ? 34 : 1;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 126 + index * 22, 210 + index * 16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
   ctx.lineWidth = 1;
-  ctx.strokeRect(38.5, 38.5, WIDTH - 77, HEIGHT - 77);
-  ctx.strokeRect(47.5, 47.5, WIDTH - 95, HEIGHT - 95);
-  drawTextBlock(ctx, text, { family: SERIF, fontSize: 44, maxWidth: 570, maxLines: 4, color: "#fffaf0", weight: 600 });
-  vignette(ctx, 0.4);
+  ctx.beginPath();
+  ctx.moveTo(58, 54);
+  ctx.lineTo(58, HEIGHT - 54);
+  ctx.moveTo(58, 54);
+  ctx.lineTo(102, 54);
+  ctx.stroke();
+  drawRichWithTheme(ctx, text, {
+    theme: "fancy", mode: "left", cx: 82, centerY: HEIGHT / 2,
+    family: SERIF, fontSize: 46, maxWidth: 390, maxLines: 4,
+    color: "#fffaf4", lineGap: 58, seed: text,
+  });
+  vignette(ctx, 0.38);
 }
 
 function drawNeon(ctx, text) {
@@ -324,14 +396,34 @@ function drawNeon(ctx, text) {
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   ctx.save();
-  ctx.shadowColor = "#22d3ee";
-  ctx.shadowBlur = 28;
-  ctx.strokeStyle = "rgba(34,211,238,0.6)";
-  ctx.lineWidth = 3;
-  roundedRect(ctx, 74, 74, WIDTH - 148, HEIGHT - 148, 50);
+  ctx.filter = "blur(24px)";
+  ctx.strokeStyle = "rgba(34,211,238,0.34)";
+  ctx.lineWidth = 14;
+  roundedRect(ctx, 72, 72, WIDTH - 144, HEIGHT - 144, 54);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(56,189,248,0.18)";
+  ctx.lineWidth = 9;
+  roundedRect(ctx, 82, 82, WIDTH - 164, HEIGHT - 164, 46);
   ctx.stroke();
   ctx.restore();
-  drawTextBlock(ctx, text, { fontSize: 49, maxWidth: 540, maxLines: 3, color: "#f8feff", shadowColor: "#22d3ee", shadowBlur: 18 });
+  const tube = ctx.createLinearGradient(80, 80, WIDTH - 80, HEIGHT - 80);
+  tube.addColorStop(0, "#a5f3fc");
+  tube.addColorStop(0.45, "#22d3ee");
+  tube.addColorStop(0.55, "#38bdf8");
+  tube.addColorStop(1, "#bae6fd");
+  ctx.strokeStyle = tube;
+  ctx.lineWidth = 2.4;
+  roundedRect(ctx, 78, 78, WIDTH - 156, HEIGHT - 156, 50);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,0.46)";
+  ctx.lineWidth = 0.8;
+  roundedRect(ctx, 82, 82, WIDTH - 164, HEIGHT - 164, 46);
+  ctx.stroke();
+  drawRichWithTheme(ctx, text, {
+    theme: "neon", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    fontSize: 49, maxWidth: 540, maxLines: 3,
+    color: "#f8feff", lineGap: 60, seed: text,
+  });
   vignette(ctx, 0.44);
 }
 
@@ -347,22 +439,26 @@ function drawGlitch(ctx, text) {
     ctx.fillStyle = i % 2 ? "rgba(0,229,255,0.18)" : "rgba(255,18,79,0.2)";
     ctx.fillRect(i % 2 ? WIDTH - width : 0, y, width, 1 + random() * 5);
   }
-  drawTextBlock(ctx, text, { fontSize: 48, maxWidth: 560, maxLines: 3, color: "#f7f7f8", shadowColor: "#00e5ff", shadowBlur: 2, shadowOffsetX: 4 });
-  ctx.save();
-  ctx.globalAlpha = 0.38;
-  ctx.translate(-4, 2);
-  drawTextBlock(ctx, text, { fontSize: 48, maxWidth: 560, maxLines: 3, color: "#ff124f" });
-  ctx.restore();
+  drawRichWithTheme(ctx, text, {
+    theme: "glitch", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    fontSize: 48, maxWidth: 560, maxLines: 3,
+    color: "#f7f7f8", lineGap: 58, seed: text,
+  });
   vignette(ctx, 0.35);
 }
 
 function drawStamp(ctx, text) {
-  ctx.fillStyle = "#f6f1e7";
+  const paper = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+  paper.addColorStop(0, "#eee7db");
+  paper.addColorStop(0.5, "#faf7f0");
+  paper.addColorStop(1, "#e9dfd1");
+  ctx.fillStyle = paper;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  paperTexture(ctx, `stamp:${text}`, { alpha: 0.035, specks: 900 });
+  paperTexture(ctx, `stamp-v3:${text}`, { alpha: 0.04, specks: 1050 });
   ctx.save();
   ctx.translate(WIDTH / 2, HEIGHT / 2);
   ctx.rotate(-0.045);
+  ctx.globalCompositeOperation = "multiply";
   ctx.strokeStyle = "rgba(157,18,35,0.92)";
   ctx.lineWidth = 11;
   ctx.beginPath();
@@ -372,8 +468,19 @@ function drawStamp(ctx, text) {
   ctx.beginPath();
   ctx.arc(0, 0, 124, 0, Math.PI * 2);
   ctx.stroke();
+  const random = randomFor(`stamp-border:${text}`);
+  ctx.fillStyle = "rgba(250,247,240,0.62)";
+  for (let index = 0; index < 72; index += 1) {
+    const angle = random() * Math.PI * 2;
+    const radius = (index % 3 === 0 ? 124 : 146) + (random() - 0.5) * 10;
+    ctx.fillRect(Math.cos(angle) * radius, Math.sin(angle) * radius, 1 + random() * 5, 1 + random() * 2.5);
+  }
   ctx.restore();
-  drawTextBlock(ctx, text, { fontSize: 47, maxWidth: 230, maxLines: 3, color: "#9d1223", weight: 900, centerY: HEIGHT / 2 });
+  drawRichWithTheme(ctx, text, {
+    theme: "stamp", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    fontSize: 47, maxWidth: 230, maxLines: 3,
+    color: "#9d1223", lineGap: 54, seed: text,
+  });
 }
 
 function drawPixel(ctx, text) {
@@ -397,7 +504,11 @@ function drawPixel(ctx, text) {
   ctx.strokeStyle = "#67e8f9";
   ctx.lineWidth = 4;
   ctx.strokeRect(46, 62, WIDTH - 92, HEIGHT - 124);
-  drawTextBlock(ctx, text, { family: MONO, fontSize: 50, maxWidth: 540, maxLines: 3, color: "#fef08a", shadowColor: "#6d0a92", shadowBlur: 0, shadowOffsetX: 6, shadowOffsetY: 7 });
+  drawRichWithTheme(ctx, text, {
+    theme: "pixel", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    family: MONO, fontSize: 50, maxWidth: 540, maxLines: 3,
+    color: "#fef08a", lineGap: 60, pixelCell: 4, seed: text,
+  });
   vignette(ctx, 0.34);
 }
 
@@ -409,12 +520,23 @@ function drawBanner(ctx, text) {
   band.addColorStop(0, "#173b78");
   band.addColorStop(0.5, "#2457a7");
   band.addColorStop(1, "#173b78");
+  ctx.save();
+  ctx.shadowColor = "rgba(20,34,66,0.22)";
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 10;
   ctx.fillStyle = band;
-  ctx.fillRect(0, 106, WIDTH, 208);
+  ctx.fillRect(0, 108, WIDTH, 204);
+  ctx.restore();
   ctx.fillStyle = "#f05a35";
-  ctx.fillRect(0, 96, WIDTH, 10);
-  ctx.fillRect(0, 314, WIDTH, 10);
-  drawTextBlock(ctx, text, { x: 70, align: "left", fontSize: 45, maxWidth: 580, maxLines: 3, color: "#fffaf2", centerY: HEIGHT / 2 });
+  ctx.fillRect(0, 98, WIDTH, 10);
+  ctx.fillRect(0, 312, WIDTH, 10);
+  ctx.fillStyle = "rgba(255,255,255,0.1)";
+  ctx.fillRect(0, 108, WIDTH, 1);
+  drawRichWithTheme(ctx, text, {
+    theme: "banner", mode: "left", cx: 70, centerY: HEIGHT / 2,
+    fontSize: 45, maxWidth: 580, maxLines: 3,
+    color: "#fffaf2", lineGap: 54, seed: text,
+  });
 }
 
 function drawSpeech(ctx, text) {
@@ -423,29 +545,37 @@ function drawSpeech(ctx, text) {
   background.addColorStop(1, "#eee7fa");
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const x = 64;
-  const y = 58;
-  const width = WIDTH - 128;
-  const height = 264;
+  const light = ctx.createRadialGradient(WIDTH * 0.78, HEIGHT * 0.18, 0, WIDTH * 0.78, HEIGHT * 0.18, 280);
+  light.addColorStop(0, "rgba(255,255,255,0.55)");
+  light.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = light;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  const visibleLength = Array.from(String(text || "").replace(/[*_`$#~]/g, "")).length;
+  const compact = visibleLength <= 12;
+  const width = compact ? 520 : WIDTH - 128;
+  const height = compact ? 210 : 264;
+  const x = (WIDTH - width) / 2;
+  const y = compact ? 76 : 58;
+  const tailX = x + 96;
+  const tailWidth = 48;
+  const tailHeight = 40;
   ctx.save();
   ctx.shadowColor = "rgba(55,65,115,0.2)";
   ctx.shadowBlur = 26;
   ctx.shadowOffsetY = 12;
   ctx.fillStyle = "#fff";
-  roundedRect(ctx, x, y, width, height, 38);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(x + 96, y + height - 2);
-  ctx.lineTo(x + 130, y + height + 46);
-  ctx.lineTo(x + 165, y + height - 2);
-  ctx.closePath();
+  speechBubblePath(ctx, x, y, width, height, 38, tailX, tailWidth, tailHeight);
   ctx.fill();
   ctx.restore();
   ctx.strokeStyle = "#5964c9";
   ctx.lineWidth = 3.5;
-  roundedRect(ctx, x, y, width, height, 38);
+  speechBubblePath(ctx, x, y, width, height, 38, tailX, tailWidth, tailHeight);
   ctx.stroke();
-  drawTextBlock(ctx, text, { fontSize: 44, maxWidth: width - 110, maxLines: 4, color: "#172033", centerY: y + height / 2 });
+  drawRichWithTheme(ctx, text, {
+    theme: "speech", mode: "center", cx: x + width / 2, centerY: y + height / 2,
+    fontSize: compact ? 46 : 42, maxWidth: width - 112, maxLines: 4,
+    color: "#172033", lineGap: 48, seed: text,
+  });
 }
 
 function drawMono(ctx, text) {
@@ -462,7 +592,11 @@ function drawMono(ctx, text) {
   ctx.moveTo(152, HEIGHT - 54);
   ctx.lineTo(WIDTH - 64, HEIGHT - 54);
   ctx.stroke();
-  drawTextBlock(ctx, text, { family: SERIF, x: 168, align: "left", fontSize: 43, maxWidth: 490, maxLines: 4, color: "#0c0c0c" });
+  drawRichWithTheme(ctx, text, {
+    theme: "mono", mode: "left", cx: 168, centerY: HEIGHT / 2,
+    family: SERIF, fontSize: 43, maxWidth: 490, maxLines: 4,
+    color: "#0c0c0c", lineGap: 52, seed: text,
+  });
 }
 
 function drawRainbow(ctx, text) {
@@ -471,29 +605,37 @@ function drawRainbow(ctx, text) {
   rainbow.forEach((color, index) => background.addColorStop(index / (rainbow.length - 1), color));
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  const shade = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+  shade.addColorStop(0, "rgba(20,16,34,0.08)");
+  shade.addColorStop(0.5, "rgba(20,16,34,0.2)");
+  shade.addColorStop(1, "rgba(20,16,34,0.28)");
+  ctx.fillStyle = shade;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const lettering = ctx.createLinearGradient(WIDTH * 0.25, 0, WIDTH * 0.75, 0);
-  [...rainbow].reverse().forEach((color, index) => {
-    lettering.addColorStop(index / (rainbow.length - 1), color);
-  });
-  drawTextBlock(ctx, text, {
-    fontSize: 50,
-    maxWidth: 570,
-    maxLines: 3,
-    color: lettering,
-    strokeColor: "rgba(8,10,18,0.88)",
-    strokeWidth: 6,
-    shadowColor: "rgba(255,255,255,0.45)",
-    shadowBlur: 5,
+  drawRichWithTheme(ctx, text, {
+    theme: "rainbow", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    fontSize: 50, maxWidth: 570, maxLines: 3,
+    color: "#ffffff", lineGap: 56, seed: text,
   });
 }
 
 function drawSticker(ctx, text) {
-  ctx.fillStyle = "#f5f7fb";
+  const background = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+  background.addColorStop(0, "#d8f0ed");
+  background.addColorStop(0.52, "#e8e2f6");
+  background.addColorStop(1, "#f6dfdc");
+  ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  paperTexture(ctx, `sticker:${text}`, { color: "40,50,70", alpha: 0.014, specks: 380 });
-  drawTextBlock(ctx, text, { fontSize: 50, maxWidth: 570, maxLines: 3, color: "#ff5368", weight: 900, shadowColor: "#fff", shadowBlur: 9 });
+  const glow = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, 20, WIDTH / 2, HEIGHT / 2, 300);
+  glow.addColorStop(0, "rgba(255,255,255,0.72)");
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  paperTexture(ctx, `sticker-v3:${text}`, { color: "40,50,70", alpha: 0.014, specks: 380 });
+  drawRichWithTheme(ctx, text, {
+    theme: "sticker", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2,
+    fontSize: 50, maxWidth: 570, maxLines: 3,
+    color: "#ff5368", lineGap: 58, seed: text,
+  });
 }
 
 function drawCode(ctx, text, profile) {
@@ -512,34 +654,76 @@ function drawCode(ctx, text, profile) {
 }
 
 function drawGold(ctx, text) {
-  const background = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
-  background.addColorStop(0, "#5b3307");
-  background.addColorStop(0.24, "#bd7a13");
-  background.addColorStop(0.5, "#f0c75a");
-  background.addColorStop(0.72, "#a8630b");
-  background.addColorStop(1, "#4b2805");
-  ctx.fillStyle = background;
+  const centerX = WIDTH / 2;
+  const centerY = HEIGHT / 2;
+  const base = ctx.createLinearGradient(0, 0, WIDTH, HEIGHT);
+  base.addColorStop(0, "#5b3307");
+  base.addColorStop(0.24, "#bd7a13");
+  base.addColorStop(0.5, "#f0c75a");
+  base.addColorStop(0.72, "#a8630b");
+  base.addColorStop(1, "#4b2805");
+  ctx.fillStyle = base;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const focus = ctx.createRadialGradient(WIDTH / 2, HEIGHT / 2, 0, WIDTH / 2, HEIGHT / 2, 300);
-  focus.addColorStop(0, "rgba(255,253,230,0.72)");
-  focus.addColorStop(0.45, "rgba(255,230,137,0.16)");
-  focus.addColorStop(1, "rgba(91,46,4,0)");
+
+  const liquidTop = ctx.createLinearGradient(0, 0, WIDTH, 0);
+  liquidTop.addColorStop(0, "rgba(255,239,171,0.04)");
+  liquidTop.addColorStop(0.45, "rgba(255,250,211,0.62)");
+  liquidTop.addColorStop(1, "rgba(255,207,92,0.05)");
+  ctx.fillStyle = liquidTop;
+  ctx.beginPath();
+  ctx.moveTo(-30, 80);
+  ctx.bezierCurveTo(WIDTH * 0.2, 8, WIDTH * 0.32, 190, WIDTH * 0.58, 92);
+  ctx.bezierCurveTo(WIDTH * 0.78, 20, WIDTH * 0.88, 110, WIDTH + 30, 42);
+  ctx.lineTo(WIDTH + 30, 128);
+  ctx.bezierCurveTo(WIDTH * 0.82, 196, WIDTH * 0.7, 102, WIDTH * 0.54, 170);
+  ctx.bezierCurveTo(WIDTH * 0.3, 252, WIDTH * 0.18, 86, -30, 160);
+  ctx.closePath();
+  ctx.fill();
+
+  const liquidBottom = ctx.createLinearGradient(0, HEIGHT, WIDTH, 0);
+  liquidBottom.addColorStop(0, "rgba(102,52,4,0.28)");
+  liquidBottom.addColorStop(0.48, "rgba(255,234,151,0.34)");
+  liquidBottom.addColorStop(1, "rgba(102,52,4,0.22)");
+  ctx.fillStyle = liquidBottom;
+  ctx.beginPath();
+  ctx.moveTo(-20, HEIGHT - 82);
+  ctx.bezierCurveTo(WIDTH * 0.2, HEIGHT - 180, WIDTH * 0.42, HEIGHT - 30, WIDTH * 0.62, HEIGHT - 116);
+  ctx.bezierCurveTo(WIDTH * 0.82, HEIGHT - 198, WIDTH * 0.9, HEIGHT - 62, WIDTH + 20, HEIGHT - 146);
+  ctx.lineTo(WIDTH + 20, HEIGHT + 20);
+  ctx.lineTo(-20, HEIGHT + 20);
+  ctx.closePath();
+  ctx.fill();
+
+  const focus = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 230);
+  focus.addColorStop(0, "rgba(255,253,230,0.74)");
+  focus.addColorStop(0.4, "rgba(255,230,137,0.22)");
+  focus.addColorStop(1, "rgba(153,88,6,0)");
   ctx.fillStyle = focus;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  const random = randomFor(`gold:${text}`);
-  for (let i = 0; i < 24; i += 1) {
-    const x = 40 + random() * 640;
-    const y = 36 + random() * 348;
-    ctx.strokeStyle = `rgba(255,251,229,${0.24 + random() * 0.55})`;
-    ctx.beginPath();
-    ctx.moveTo(x - 5, y);
-    ctx.lineTo(x + 5, y);
-    ctx.moveTo(x, y - 5);
-    ctx.lineTo(x, y + 5);
-    ctx.stroke();
+
+  const random = randomFor(`gold-v3:${text}`);
+  for (let index = 0; index < 16; index += 1) {
+    drawSpark(
+      ctx,
+      38 + random() * (WIDTH - 76),
+      36 + random() * (HEIGHT - 72),
+      3 + random() * 5,
+      "#fffbe5",
+      0.3 + random() * 0.45,
+    );
   }
-  drawTextBlock(ctx, text, { fontSize: 49, maxWidth: 590, maxLines: 3, color: "#fff8d0", weight: 900, shadowColor: "#6e3d04", shadowBlur: 7, shadowOffsetY: 6 });
-  vignette(ctx, 0.32);
+  drawRichWithTheme(ctx, text, {
+    theme: "gold", mode: "center", cx: centerX, centerY,
+    fontSize: 49, maxWidth: WIDTH - 100, maxLines: 3,
+    color: "#fff8d0", lineGap: 58, seed: text,
+  });
+
+  const edge = ctx.createRadialGradient(centerX, centerY, 120, centerX, centerY, WIDTH * 0.7);
+  edge.addColorStop(0, "rgba(91,46,4,0)");
+  edge.addColorStop(0.72, "rgba(91,46,4,0.06)");
+  edge.addColorStop(1, "rgba(78,38,3,0.42)");
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
 }
 
 function formatCount(value) {
@@ -589,16 +773,10 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   ctx.fillText(handle, mx + nameWidth + 10, 56);
   const handleWidth = ctx.measureText(handle).width;
   ctx.fillText(`· ${dateLabel(post?.createdAt, timeZone)}`, mx + nameWidth + handleWidth + 20, 56);
-  drawTextBlock(ctx, text, {
-    x: 44,
-    align: "left",
-    topY: 128,
-    fontSize: 28,
-    maxWidth: WIDTH - 88,
-    allowOverflow: true,
-    lineHeight: 40,
-    color: "#0f1419",
-    weight: 600,
+  drawRichWithTheme(ctx, text, {
+    theme: "post", mode: "left", cx: 44, topY: 128,
+    fontSize: 28, maxWidth: WIDTH - 88, maxLines: Number.POSITIVE_INFINITY,
+    color: "#0f1419", lineGap: 40, seed: text,
   });
   const dividerY = HEIGHT - 76;
   ctx.strokeStyle = "#eff3f4";
@@ -737,7 +915,11 @@ function drawIconQuote(ctx, text, profile, avatarImage) {
   ctx.fillStyle = "rgba(255,255,255,0.18)";
   ctx.font = `700 72px Georgia, ${SERIF}`;
   ctx.fillText("“", 32, 88);
-  drawTextBlock(ctx, text, { family: SERIF, x: 46, align: "left", centerY: HEIGHT / 2 - 22, fontSize: 31, maxWidth: 382, maxLines: 6, color: "#f4f4f3", weight: 500 });
+  drawRichWithTheme(ctx, text, {
+    theme: "plain", mode: "left", cx: 46, centerY: HEIGHT / 2 - 22,
+    family: SERIF, fontSize: 31, maxWidth: 382, maxLines: 6,
+    color: "#f4f4f3", lineGap: 43, seed: text,
+  });
   ctx.strokeStyle = "rgba(255,255,255,0.24)";
   ctx.beginPath();
   ctx.moveTo(46, HEIGHT - 78);
@@ -768,7 +950,11 @@ function drawUnknown(ctx, commandId, text) {
   ctx.font = `700 25px ${SANS}`;
   ctx.textAlign = "left";
   ctx.fillText(`@tbot ${commandId}`, 34, 96);
-  drawTextBlock(ctx, text || "未登録のコマンド", { fontSize: 40, maxWidth: 580, maxLines: 3, color: "#fff1f2" });
+  drawRichWithTheme(ctx, text || "未登録のコマンド", {
+    theme: "plain", mode: "center", cx: WIDTH / 2, centerY: HEIGHT / 2 + 24,
+    fontSize: 40, maxWidth: 580, maxLines: 3,
+    color: "#fff1f2", lineGap: 52, seed: text,
+  });
 }
 
 async function loadAvatar(url, allowedHosts, timeoutMs = 8_000) {
