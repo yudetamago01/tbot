@@ -7,7 +7,7 @@ function fixture({ notifications = [], config = {} } = {}) {
   const logs = [];
   const getPostIds = [];
   const posts = new Map([
-    [101, { id: 101, content: "親投稿", createdAt: "2026-09-20T01:00:00.000Z", likesCount: 12, author: { username: "alice", displayName: "Alice", avatarUrl: "https://api.karotter.com/a.webp" } }],
+    [101, { id: 101, content: "親投稿", createdAt: "2026-09-20T01:00:00.000Z", likesCount: 12, author: { username: "alice", displayName: "Alice", avatarUrl: "/uploads/avatars/alice.webp" } }],
     [102, { id: 102, parentId: 101, content: "@tbot post", createdAt: "2026-09-20T01:01:00.000Z", author: { username: "bob", displayName: "Bob" } }],
     [103, { id: 103, content: "自分の文 @tbot post", createdAt: "2026-09-20T01:02:00.000Z", likesCount: 99, author: { username: "bob", displayName: "Bob" } }],
   ]);
@@ -69,6 +69,7 @@ test("command-only reply renders the parent post and metrics", async () => {
   });
   assert.equal(rendererCalls[0].text, "親投稿");
   assert.equal(rendererCalls[0].profile.handle, "@alice");
+  assert.equal(rendererCalls[0].profile.avatarUrl, "https://api.karotter.com/uploads/avatars/alice.webp");
   assert.equal(rendererCalls[0].post.metrics.likes, 12);
   assert.equal(calls[0][1].parentId, 102);
   assert.equal(Object.hasOwn(calls[0][1], "content"), false);

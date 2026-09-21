@@ -46,3 +46,19 @@ test("parent post keeps date, avatar, and reactions", () => {
   assert.equal(snapshot.author.avatarUrl, "https://api.karotter.com/uploads/avatars/parent.webp");
   assert.equal(snapshot.metrics.likes, 8);
 });
+
+test("relative Karotter avatar paths become fetchable absolute URLs", () => {
+  const snapshot = snapshotPost({
+    id: 9,
+    content: "本文",
+    author: {
+      username: "alice",
+      avatarUrl: "/uploads/avatars/alice.webp",
+    },
+  });
+
+  assert.equal(
+    snapshot.author.avatarUrl,
+    "https://api.karotter.com/uploads/avatars/alice.webp",
+  );
+});

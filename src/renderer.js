@@ -855,7 +855,15 @@ function needsByline(commandId) {
   return !new Set(["help", "post", "iconquote", "stamp", "sticker", "gold", "code"]).has(commandId);
 }
 
-export async function renderImage({ commandId, text, profile, post, avatarAllowedHosts = new Set(), timeZone = "Asia/Tokyo" }) {
+export async function renderImage({
+  commandId,
+  text,
+  profile,
+  post,
+  avatarAllowedHosts = new Set(),
+  timeZone = "Asia/Tokyo",
+  log,
+}) {
   registerFonts();
   const canvas = createCanvas(WIDTH * SCALE, HEIGHT * SCALE);
   const ctx = canvas.getContext("2d");
@@ -864,6 +872,19 @@ export async function renderImage({ commandId, text, profile, post, avatarAllowe
   const avatarImage = new Set(["post", "iconquote"]).has(commandId)
     ? await loadAvatar(profile?.avatarUrl, avatarAllowedHosts)
     : null;
+  if (new Set(["post", "iconquote"]).has(commandId) && profile?.avatarUrl && !avatarImage) {
+    let avatarHost = null;
+    try {
+      avatarHost = new URL(profile.avatarUrl).hostname;
+    } catch {
+      // The URL normalizer should prevent this; keep the render fallback safe.
+    }
+    log?.warn?.("avatar_load_failed", {
+      command: commandId,
+      username: profile?.username || null,
+      avatarHost,
+    });
+  }
   switch (commandId) {
     case "help": drawHelp(ctx); break;
     case "quote": drawQuote(ctx, text); break;

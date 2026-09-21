@@ -22,6 +22,16 @@ export function normalizeMetrics(post) {
   };
 }
 
+function normalizeAvatarUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw, "https://api.karotter.com").href;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeProfile(author = {}) {
   const username = String(author.username || "unknown").replace(/^@/, "");
   return {
@@ -29,7 +39,9 @@ export function normalizeProfile(author = {}) {
     name: author.displayName || author.name || username,
     handle: `@${username}`,
     username,
-    avatarUrl: author.avatarUrl || null,
+    avatarUrl: normalizeAvatarUrl(
+      author.avatarUrl || author.iconUrl || author.profileImageUrl,
+    ),
   };
 }
 

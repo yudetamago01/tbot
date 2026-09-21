@@ -208,6 +208,7 @@ export class BotService {
         post: source.post,
         avatarAllowedHosts: this.config.avatarAllowedHosts,
         timeZone: this.config.timeZone,
+        log: this.log,
       });
       const responsePost = await this.client.createPost({
         parentId: commandPost.id,
