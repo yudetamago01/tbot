@@ -11,9 +11,13 @@ services:
       - key: NODE_VERSION
         value: 22.14.0
       - key: KAROTTER_API_BASE_URL
-        value: https://karotter.com/api/developer
+        value: https://api.karotter.com/api
       - key: KAROTTER_AUTH_MODE
-        value: oauth
+        value: account
+      - key: KAROTTER_IDENTIFIER
+        sync: false
+      - key: KAROTTER_PASSWORD
+        sync: false
       - key: TBOT_USERNAME
         value: tbot
       - key: KAROTTER_OAUTH_BASE_URL

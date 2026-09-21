@@ -25,6 +25,7 @@ export class KarotterClient {
     timeoutMs = 15_000,
     requestsPerMinute = 55,
     tokenProvider,
+    deviceIdProvider,
     fetchImpl = fetch,
   }) {
     this.apiKey = apiKey;
@@ -33,20 +34,26 @@ export class KarotterClient {
     this.timeoutMs = timeoutMs;
     this.requestsPerMinute = requestsPerMinute;
     this.tokenProvider = tokenProvider;
+    this.deviceIdProvider = deviceIdProvider;
     this.fetchImpl = fetchImpl;
     this.requestTimestamps = [];
     this.requestGate = Promise.resolve();
   }
 
   hasAuthConfiguration() {
-    if (this.authMode === "oauth") return typeof this.tokenProvider === "function";
+    if (this.authMode === "oauth" || this.authMode === "account") return typeof this.tokenProvider === "function";
     return Boolean(this.apiKey);
   }
 
   async authHeaders() {
-    if (this.authMode === "oauth") {
+    if (this.authMode === "oauth" || this.authMode === "account") {
       const token = await this.tokenProvider();
-      return { Authorization: `Bearer ${token}` };
+      const headers = { Authorization: `Bearer ${token}` };
+      if (this.authMode === "account") {
+        headers["x-client-type"] = "web";
+        headers["x-device-id"] = this.deviceIdProvider();
+      }
+      return headers;
     }
     if (this.authMode === "bearer") return { Authorization: `Bearer ${this.apiKey}` };
     return { "x-api-key": this.apiKey };
@@ -110,15 +117,15 @@ export class KarotterClient {
   }
 
   getMe() {
-    return this.request("/users/me");
+    return this.request(this.authMode === "account" ? "/auth/me" : "/users/me");
   }
 
   async getNotifications({ page = 1, limit = 50, type = "MENTION,REPLY" } = {}) {
     const query = new URLSearchParams({
       page: String(page),
       limit: String(limit),
-      type,
     });
+    query.set(this.authMode === "account" ? "types" : "type", type);
     return this.request(`/notifications?${query}`);
   }
 
@@ -146,6 +153,11 @@ export class KarotterClient {
   }
 
   markNotificationRead(notificationId) {
+    if (this.authMode === "account") {
+      // The first-party API marks notification groups in bulk. Local durable
+      // state prevents duplicate replies without racing newer notifications.
+      return Promise.resolve({ skipped: true, notificationId });
+    }
     return this.request(`/notifications/${encodeURIComponent(notificationId)}/read`, {
       method: "PATCH",
     });

@@ -10,14 +10,13 @@ Karotterの投稿中に書かれた`@tbot コマンド`を検出し、本文を�
 
 ## Karotter APIとの接続
 
-公式の[Karotter Developer API](https://karotter.com/api-docs)を使用します。
+Karotter公式Webクライアントと同じアカウントAPIを使用します。OAuthやDeveloper API方式も互換用として残しています。
 
-- 認証: Karotterアカウントログインで取得した`Authorization: Bearer`トークン。OAuth同意画面は互換用として残しています
-- 必要スコープ: `canReadPosts`, `canCreatePosts`
-- 通知取得: `GET /api/developer/notifications?type=MENTION,REPLY`
-- 投稿取得: `GET /api/developer/posts/:postId`
-- 画像返信: `POST /api/developer/posts`の`media`と`parentId`
-- 処理済み通知: `PATCH /api/developer/notifications/:notificationId/read`
+- 認証: 起動時にKarotterのID・パスワードで通常ログインし、取得した`Authorization: Bearer`トークンを使用。OAuth同意画面は互換用として残しています
+- 通知取得: `GET https://api.karotter.com/api/notifications?types=MENTION,REPLY`
+- 投稿取得: `GET https://api.karotter.com/api/posts/:postId`
+- 画像返信: `POST https://api.karotter.com/api/posts`の`media`と`parentId`
+- 処理済み通知: ローカル状態ファイルで管理し、新しい通知だけを返信対象にします
 
 サーバー起動時刻より前に作成された未読通知は画像返信せず、既読化だけ行います。これにより再起動時に過去のメンションへ再返信しません。古い通知が残っていても、起動後の新しい通知は同じポーリング内で通常どおり処理します。
 
@@ -41,20 +40,21 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 
 1. Karotterでtbot用アカウントを作成し、ユーザー名を`tbot`にします。
 2. このリポジトリからRender Blueprintを作成します。
-3. 互換用OAuthを使う場合のみ、`KAROTTER_OAUTH_CLIENT_ID`、`KAROTTER_OAUTH_CLIENT_SECRET`、`KAROTTER_OAUTH_REDIRECT_URI`をRenderのSecret環境変数へ設定します。
+3. RenderのSecret環境変数として`KAROTTER_IDENTIFIER`と`KAROTTER_PASSWORD`を設定します。GitHubのソースへ認証情報を直接コミットしないでください。
 4. OAuth開始画面を第三者に操作されないよう、十分に長いランダム値を`TBOT_SETUP_SECRET`へ設定します。
-5. `https://<サービス名>.onrender.com/oauth/start`を開きます。Basic認証のユーザー名には`tbot`、パスワードには`TBOT_SETUP_SECRET`を入力します。
-6. tbot専用画面にKarotterのID・パスワードを入力します。認証情報はKarotterのログインAPIへ一度だけ転送し、パスワードはファイルやログへ保存しません。2段階認証が有効な場合は続けて認証コードを入力します。
-7. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
+5. デプロイ時にtbotがID・パスワードで自動ログインします。手動で認証し直す場合だけ`https://<サービス名>.onrender.com/oauth/start`を使用します。
+6. `/oauth/status`の`authorized`と`/ready`の`ok`が`true`になることを確認します。
 
-`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JPを取得するため、Render上でも日本語が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。またローカルファイルが失われる再起動後はOAuthの再認可が必要です。常時運用ではスリープしないプランとPersistent Diskを使用してください。
+`render.yaml`は無料Web Serviceを前提にしています。ビルド時にGoogle Fonts公式リポジトリからNoto Sans JP / Noto Serif JPを取得するため、Render上でも日本語が豆腐文字になりません。無料プランは15分間受信トラフィックがないとスリープし、その間は通知を処理できません。再起動後はRender SecretのID・パスワードで自動的に再ログインします。常時運用ではスリープしないプランを使用してください。
 
 ## 環境変数
 
 | 名前 | 既定値 | 用途 |
 |---|---:|---|
-| `KAROTTER_AUTH_MODE` | `oauth` | 推奨は`oauth`。互換用に`x-api-key`と`bearer`も利用可能 |
-| `KAROTTER_API_BASE_URL` | `https://karotter.com/api/developer` | APIベースURL |
+| `KAROTTER_AUTH_MODE` | `account` | ID・パスワードによる通常ログイン。互換用に`oauth`、`x-api-key`、`bearer`も利用可能 |
+| `KAROTTER_API_BASE_URL` | `https://api.karotter.com/api` | 通常ログイン時のKarotter本体APIベースURL |
+| `KAROTTER_IDENTIFIER` | なし | Karotterのユーザー名またはメールアドレス（Render Secret） |
+| `KAROTTER_PASSWORD` | なし | Karotterのパスワード（Render Secret） |
 | `KAROTTER_OAUTH_CLIENT_ID` | なし | OAuthアプリのClient ID |
 | `KAROTTER_OAUTH_CLIENT_SECRET` | なし | OAuthアプリのClient Secret |
 | `KAROTTER_OAUTH_REDIRECT_URI` | なし | 登録済みの`/oauth/callback` URL |
@@ -75,7 +75,7 @@ Node.jsは`.env`を自動では読みません。ローカルではシェルか�
 
 ## 運用上の安全性
 
-- KarotterのID・パスワードはtbotの保護されたセットアップ画面からKarotterのログインAPIへ転送します。パスワードは永続化・ログ出力しません。
+- KarotterのID・パスワードはRender Secretから読み、起動時にKarotterのログインAPIへ直接送信します。パスワードはtbotのファイル・状態データ・ログへ書き込みません。
 - OAuthトークン、Client Secret、セットアップ用Secretはログやリポジトリへ保存しません。
 - アイコンURLはHTTPSかつ許可ホストの画像だけ取得します。
 - 取得画像は8MBまで、API通信はタイムアウト付きです。

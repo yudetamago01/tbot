@@ -79,6 +79,7 @@ export class OAuthSession {
     initialRefreshToken,
     stateSecret,
     accountBaseUrl = ACCOUNT_API_BASE_URL,
+    defaultProvider = "oauth",
     timeoutMs = 15_000,
     fetchImpl = fetch,
     log,
@@ -92,6 +93,7 @@ export class OAuthSession {
     this.initialRefreshToken = initialRefreshToken;
     this.stateSecret = stateSecret || clientSecret;
     this.accountBaseUrl = String(accountBaseUrl || ACCOUNT_API_BASE_URL).replace(/\/+$/, "");
+    this.defaultProvider = defaultProvider === "account" ? "account" : "oauth";
     this.timeoutMs = timeoutMs;
     this.fetchImpl = fetchImpl;
     this.log = log;
@@ -102,7 +104,7 @@ export class OAuthSession {
       refreshToken: null,
       expiresAt: 0,
       scope: null,
-      provider: "oauth",
+      provider: this.defaultProvider,
       deviceId: randomBytes(16).toString("hex"),
     };
   }
@@ -121,7 +123,7 @@ export class OAuthSession {
         refreshToken: parsed?.refreshToken || null,
         expiresAt: Number(parsed?.expiresAt) || 0,
         scope: parsed?.scope || null,
-        provider: parsed?.provider === "account" ? "account" : "oauth",
+        provider: parsed?.provider === "account" ? "account" : this.defaultProvider,
         deviceId: parsed?.deviceId || this.tokens.deviceId,
       };
     } catch (error) {
@@ -142,6 +144,10 @@ export class OAuthSession {
       expiresAt: this.tokens.expiresAt ? new Date(this.tokens.expiresAt).toISOString() : null,
       scope: this.tokens.scope,
     };
+  }
+
+  getDeviceId() {
+    return this.tokens.deviceId;
   }
 
   createAuthorizationUrl() {

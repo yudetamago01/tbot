@@ -16,13 +16,16 @@ function booleanEnv(name, fallback) {
 
 export function loadConfig() {
   const apiKey = String(process.env.KAROTTER_API_KEY || "").trim();
-  const authMode = String(process.env.KAROTTER_AUTH_MODE || "oauth").trim().toLowerCase();
-  if (!new Set(["x-api-key", "bearer", "oauth"]).has(authMode)) {
-    throw new Error("KAROTTER_AUTH_MODE must be x-api-key, bearer, or oauth");
+  const authMode = String(process.env.KAROTTER_AUTH_MODE || "account").trim().toLowerCase();
+  if (!new Set(["x-api-key", "bearer", "oauth", "account"]).has(authMode)) {
+    throw new Error("KAROTTER_AUTH_MODE must be account, x-api-key, bearer, or oauth");
   }
-  const baseUrl = String(
-    process.env.KAROTTER_API_BASE_URL || "https://karotter.com/api/developer",
-  ).replace(/\/+$/, "");
+  const configuredBaseUrl = String(process.env.KAROTTER_API_BASE_URL || "").replace(/\/+$/, "");
+  const baseUrl = authMode === "account"
+    ? configuredBaseUrl && configuredBaseUrl !== "https://karotter.com/api/developer"
+      ? configuredBaseUrl
+      : "https://api.karotter.com/api"
+    : configuredBaseUrl || "https://karotter.com/api/developer";
   const username = String(process.env.TBOT_USERNAME || "tbot").trim().replace(/^@/, "");
   const timeZone = String(process.env.TBOT_TIME_ZONE || "Asia/Tokyo").trim();
   try {
@@ -60,6 +63,12 @@ export function loadConfig() {
       tokenPath: String(process.env.KAROTTER_OAUTH_TOKEN_PATH || "./data/oauth.json"),
       refreshToken: String(process.env.KAROTTER_OAUTH_REFRESH_TOKEN || "").trim(),
       setupSecret: String(process.env.TBOT_SETUP_SECRET || ""),
+    },
+    account: {
+      identifier: String(
+        process.env.KAROTTER_IDENTIFIER || process.env.KAROTTER_ID || process.env.KAROTTER_USERNAME || "",
+      ).trim(),
+      password: String(process.env.KAROTTER_PASSWORD || ""),
     },
   };
 }

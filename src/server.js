@@ -9,16 +9,29 @@ import { renderImage } from "./renderer.js";
 import { StateStore } from "./state-store.js";
 
 const config = loadConfig();
-const oauthSession = config.authMode === "oauth"
+const oauthSession = new Set(["oauth", "account"]).has(config.authMode)
   ? new OAuthSession({
       ...config.oauth,
       initialRefreshToken: config.oauth.refreshToken,
       stateSecret: config.oauth.setupSecret,
+      defaultProvider: config.authMode,
       timeoutMs: config.httpTimeoutMs,
       log: logger,
     })
   : null;
 await oauthSession?.load();
+if (config.authMode === "account" && config.account.identifier && config.account.password) {
+  try {
+    const login = await oauthSession.loginWithPassword(config.account);
+    if (login.twoFactorRequired) {
+      logger.warn("karotter_account_auto_login_requires_2fa");
+    } else {
+      logger.info("karotter_account_auto_login_succeeded");
+    }
+  } catch (error) {
+    logger.warn("karotter_account_auto_login_failed", { error: error.message });
+  }
+}
 const client = new KarotterClient({
   apiKey: config.apiKey,
   authMode: config.authMode,
@@ -26,6 +39,7 @@ const client = new KarotterClient({
   timeoutMs: config.httpTimeoutMs,
   requestsPerMinute: config.requestsPerMinute,
   tokenProvider: oauthSession ? () => oauthSession.getAccessToken() : undefined,
+  deviceIdProvider: oauthSession ? () => oauthSession.getDeviceId() : undefined,
 });
 const stateStore = new StateStore(config.statePath, logger);
 const bot = new BotService({
@@ -79,7 +93,7 @@ function oauthPage(response, { success }) {
 <title>tbot OAuth</title>
 <style>body{font-family:system-ui,sans-serif;max-width:42rem;margin:12vh auto;padding:0 1.5rem;color:#172033}main{border:1px solid #d8dee9;border-radius:18px;padding:2rem;box-shadow:0 12px 42px #17203312}h1{font-size:1.5rem}p{line-height:1.75}</style>
 <main><h1>${success ? "Karotter認証が完了しました" : "Karotter認証に失敗しました"}</h1>
-<p>${success ? "tbotはOAuthアクセストークンで通知取得と画像返信を開始します。この画面は閉じて構いません。" : "認証を最初からやり直してください。継続して失敗する場合はRenderのOAuth設定を確認してください。"}</p></main></html>`);
+<p>${success ? "tbotはKarotterへの接続を完了し、通知取得と画像返信を開始します。この画面は閉じて構いません。" : "認証を最初からやり直してください。継続して失敗する場合はRenderのログと認証設定を確認してください。"}</p></main></html>`);
 }
 
 function accountLoginPage(response, { error = "", twoFactorKey = "" } = {}) {

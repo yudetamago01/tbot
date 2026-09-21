@@ -70,6 +70,37 @@ test("OAuth mode obtains a current bearer token from its provider", async () => 
   assert.equal(client.hasAuthConfiguration(), true);
 });
 
+test("account mode uses the first-party API paths and session headers", async () => {
+  const requests = [];
+  const client = new KarotterClient({
+    authMode: "account",
+    baseUrl: "https://api.karotter.com/api",
+    tokenProvider: async () => "account-access-token",
+    deviceIdProvider: () => "device-id",
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith("/auth/me")) return jsonResponse({ user: { id: 1, username: "tbot" } });
+      return jsonResponse({ notifications: [], pagination: { page: 1, limit: 25 } });
+    },
+  });
+
+  await client.getMe();
+  await client.getNotifications({ page: 1, limit: 25, type: "MENTION,REPLY" });
+
+  assert.equal(requests[0].url, "https://api.karotter.com/api/auth/me");
+  assert.equal(requests[0].options.headers.Authorization, "Bearer account-access-token");
+  assert.equal(requests[0].options.headers["x-client-type"], "web");
+  assert.equal(requests[0].options.headers["x-device-id"], "device-id");
+  const notificationUrl = new URL(requests[1].url);
+  assert.equal(notificationUrl.pathname, "/api/notifications");
+  assert.equal(notificationUrl.searchParams.get("types"), "MENTION,REPLY");
+  assert.equal(notificationUrl.searchParams.has("type"), false);
+  assert.deepEqual(await client.markNotificationRead("notification-1"), {
+    skipped: true,
+    notificationId: "notification-1",
+  });
+});
+
 test("image replies are sent as multipart posts with parentId and media", async () => {
   let form;
   let method;
