@@ -134,9 +134,11 @@ export class KarotterClient {
     return result?.post || result;
   }
 
-  async createPost({ content = "", parentId, quotedPostId, visibility, image }) {
+  async createPost({ content, parentId, quotedPostId, visibility, image }) {
     const form = new FormData();
-    form.append("content", String(content));
+    if (content != null && String(content).length > 0) {
+      form.append("content", String(content));
+    }
     if (parentId != null) form.append("parentId", String(parentId));
     if (quotedPostId != null) form.append("quotedPostId", String(quotedPostId));
     if (visibility) form.append("visibility", String(visibility));

@@ -4,6 +4,7 @@ import { BotService } from "../src/bot-service.js";
 
 function fixture({ notifications = [], config = {} } = {}) {
   const calls = [];
+  const logs = [];
   const getPostIds = [];
   const posts = new Map([
     [101, { id: 101, content: "親投稿", createdAt: "2026-09-20T01:00:00.000Z", likesCount: 12, author: { username: "alice", displayName: "Alice", avatarUrl: "https://api.karotter.com/a.webp" } }],
@@ -49,18 +50,40 @@ function fixture({ notifications = [], config = {} } = {}) {
       maxNotificationsPerTick: 10,
       ...config,
     },
-    log: { info() {}, warn() {}, error() {} },
+    log: {
+      info(message, fields) { logs.push(["info", message, fields]); },
+      warn(message, fields) { logs.push(["warn", message, fields]); },
+      error(message, fields) { logs.push(["error", message, fields]); },
+    },
   });
-  return { service, calls, rendererCalls, getPostIds };
+  return { service, calls, rendererCalls, getPostIds, logs };
 }
 
 test("command-only reply renders the parent post and metrics", async () => {
-  const { service, rendererCalls, calls } = fixture();
-  await service.processNotification({ id: 1, post: { id: 102 } });
+  const { service, rendererCalls, calls, logs } = fixture();
+  await service.processNotification({
+    id: 1,
+    type: "MENTION",
+    createdAt: "2026-09-20T01:01:05.000Z",
+    post: { id: 102 },
+  });
   assert.equal(rendererCalls[0].text, "親投稿");
   assert.equal(rendererCalls[0].profile.handle, "@alice");
   assert.equal(rendererCalls[0].post.metrics.likes, 12);
   assert.equal(calls[0][1].parentId, 102);
+  assert.equal(Object.hasOwn(calls[0][1], "content"), false);
+  assert.deepEqual(
+    logs.find(([, message]) => message === "mention_detected"),
+    ["info", "mention_detected", {
+      notificationId: 1,
+      postId: 102,
+      author: "bob",
+      command: "post",
+      commandOnly: true,
+      notificationType: "MENTION",
+      notificationCreatedAt: "2026-09-20T01:01:05.000Z",
+    }],
+  );
 });
 
 test("direct post command renders zero reactions", async () => {

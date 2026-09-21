@@ -2,8 +2,6 @@ import { parseCommand } from "./commands.js";
 import { KarotterApiError } from "./karotter-client.js";
 import { snapshotPost } from "./post-data.js";
 
-const INVISIBLE_POST_CONTENT = "\u2063";
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -184,6 +182,15 @@ export class BotService {
         await this.finishNotification(notificationId, { ignored: true });
         return;
       }
+      this.log.info("mention_detected", {
+        notificationId,
+        postId: commandPost.id,
+        author: authorUsername || null,
+        command: parsed.command.id,
+        commandOnly: parsed.commandOnly,
+        notificationType: notification?.type || null,
+        notificationCreatedAt: notification?.createdAt || null,
+      });
       const source = await this.resolveSource(commandPost, parsed);
       const allowsEmpty = parsed.command.id === "help" || parsed.command.unknown;
       if (!source.content && !allowsEmpty) {
@@ -203,7 +210,6 @@ export class BotService {
         timeZone: this.config.timeZone,
       });
       const responsePost = await this.client.createPost({
-        content: INVISIBLE_POST_CONTENT,
         parentId: commandPost.id,
         image: {
           buffer: imageBuffer,

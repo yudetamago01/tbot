@@ -116,14 +116,13 @@ test("image replies are sent as multipart posts with parentId and media", async 
   });
 
   const result = await client.createPost({
-    content: "\u2063",
     parentId: "parent-1",
     image: { buffer: Buffer.from("png"), mimeType: "image/png", filename: "tbot.png" },
   });
 
   assert.equal(method, "POST");
   assert.ok(form instanceof FormData);
-  assert.equal(form.get("content"), "\u2063");
+  assert.equal(form.has("content"), false);
   assert.equal(form.get("parentId"), "parent-1");
   assert.equal(form.get("media").name, "tbot.png");
   assert.equal(form.get("media").type, "image/png");
