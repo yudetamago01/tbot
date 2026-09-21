@@ -2,8 +2,9 @@ import { createCanvas } from "@napi-rs/canvas";
 
 const EMOJI_FAMILY = '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"';
 const DEFAULT_FAMILY = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", ${EMOJI_FAMILY}, sans-serif`;
-const CODE_FAMILY = `"Cascadia Mono", Consolas, "MS Gothic", ${EMOJI_FAMILY}, monospace`;
+const CODE_FAMILY = `"Cascadia Mono", Consolas, "Noto Sans JP", "MS Gothic", ${EMOJI_FAMILY}, monospace`;
 const MATH_FAMILY = `"Cambria Math", "Times New Roman", "Yu Mincho", "Noto Serif JP", ${EMOJI_FAMILY}, serif`;
+export const RICH_TEXT_FONT_STACKS = Object.freeze({ default: DEFAULT_FAMILY, code: CODE_FAMILY, math: MATH_FAMILY });
 
 const MATH_GREEK = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε",

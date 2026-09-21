@@ -19,8 +19,9 @@ const SCALE = 2;
 const EMOJI = '"Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji"';
 const SANS = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans JP", ${EMOJI}, sans-serif`;
 const SERIF = `"Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", Georgia, ${EMOJI}, serif`;
-const MONO = `"Cascadia Mono", Consolas, "MS Gothic", ${EMOJI}, monospace`;
+const MONO = `"Cascadia Mono", Consolas, "Noto Sans JP", "MS Gothic", ${EMOJI}, monospace`;
 const BRUSH = `"Yuji Syuku", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif JP", ${EMOJI}, serif`;
+export const RENDERER_FONT_STACKS = Object.freeze({ sans: SANS, serif: SERIF, mono: MONO, brush: BRUSH });
 const SNS_ICON_COLOR = "#536471";
 
 const snsIconSources = {

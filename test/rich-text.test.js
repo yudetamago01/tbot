@@ -4,10 +4,11 @@ import { createCanvas } from "@napi-rs/canvas";
 import {
   drawRichWithTheme,
   parseMathExpression,
+  RICH_TEXT_FONT_STACKS,
   tokenizeRichText,
   wrapRichRuns,
 } from "../src/rich-text.js";
-import { renderImage, verticalGlyphRotation } from "../src/renderer.js";
+import { RENDERER_FONT_STACKS, renderImage, verticalGlyphRotation } from "../src/renderer.js";
 
 test("Markdown syntax becomes styled runs instead of visible punctuation", () => {
   const runs = tokenizeRichText("# 見出し\n**太字** *斜体* ~~取消~~ `code` [link](https://example.com)");
@@ -93,6 +94,13 @@ test("vertical prolonged sound marks rotate with the writing direction", () => {
   assert.equal(verticalGlyphRotation("ー"), Math.PI / 2);
   assert.equal(verticalGlyphRotation("ｰ"), Math.PI / 2);
   assert.equal(verticalGlyphRotation("あ"), 0);
+});
+
+test("Linux mono fallbacks select Japanese text before the emoji font", () => {
+  for (const stack of [RENDERER_FONT_STACKS.mono, RICH_TEXT_FONT_STACKS.code]) {
+    assert.ok(stack.indexOf("Noto Sans JP") >= 0);
+    assert.ok(stack.indexOf("Noto Sans JP") < stack.indexOf("Noto Color Emoji"));
+  }
 });
 
 test("post text keeps its fixed typography when adaptive fitting is disabled", () => {
