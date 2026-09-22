@@ -5,6 +5,12 @@ const DEFAULT_FAMILY = `"Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Noto Sans 
 const CODE_FAMILY = `"Cascadia Mono", Consolas, "Noto Sans JP", "MS Gothic", ${EMOJI_FAMILY}, monospace`;
 const MATH_FAMILY = `"Cambria Math", "Times New Roman", "Yu Mincho", "Noto Serif JP", ${EMOJI_FAMILY}, serif`;
 export const RICH_TEXT_FONT_STACKS = Object.freeze({ default: DEFAULT_FAMILY, code: CODE_FAMILY, math: MATH_FAMILY });
+const graphemeSegmenter = new Intl.Segmenter("und", { granularity: "grapheme" });
+const emojiGraphemePattern = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
+
+function graphemes(value) {
+  return Array.from(graphemeSegmenter.segment(value), ({ segment }) => segment);
+}
 
 const MATH_GREEK = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε",
@@ -369,13 +375,61 @@ function measureRun(ctx, run, baseSize, family) {
   return { width: ctx.measureText(run.text).width, height: baseSize * 1.25 * (run.size || 1) };
 }
 
-function drawRun(ctx, run, x, y, baseSize, family, defaultColor) {
+function drawEmojiGlyph(ctx, text, x, y, bold, italic, fontSize) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (italic) ctx.transform(1, 0, -0.2, 1, 0, 0);
+  if (bold) {
+    // Color emoji fonts ignore font-weight. Expand their silhouette without
+    // replacing the original multi-color glyph with a monochrome stroke.
+    const offset = Math.max(0.8, Math.round(fontSize * 0.025));
+    for (const [dx, dy] of [[-offset, 0], [offset, 0], [0, -offset], [0, offset]]) {
+      ctx.fillText(text, dx, dy);
+    }
+  }
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+function drawRun(ctx, run, x, y, baseSize, family, defaultColor, emojiGlyphs = null) {
   const color = run.color || defaultColor;
   if (run.math) return drawMathTokens(ctx, parseMathExpression(run.text), x, y, baseSize * (run.size || 1), color);
   ctx.font = richFontFor(run, baseSize, family);
   ctx.fillStyle = color;
   ctx.textAlign = "left";
-  ctx.fillText(run.text, x, y);
+  const clusters = graphemes(run.text);
+  const emphasizeEmoji = run.emojiBold ?? run.bold;
+  if (clusters.some((cluster) => emojiGraphemePattern.test(cluster))) {
+    let cursor = x;
+    let ordinaryText = "";
+    const drawOrdinaryText = () => {
+      if (!ordinaryText) return;
+      ctx.fillText(ordinaryText, cursor, y);
+      cursor += ctx.measureText(ordinaryText).width;
+      ordinaryText = "";
+    };
+    for (const cluster of clusters) {
+      if (!emojiGraphemePattern.test(cluster)) {
+        ordinaryText += cluster;
+        continue;
+      }
+      drawOrdinaryText();
+      const emojiWidth = ctx.measureText(cluster).width;
+      const fontSize = baseSize * (run.size || 1);
+      drawEmojiGlyph(ctx, cluster, cursor, y, emphasizeEmoji, run.italic, fontSize);
+      if (emojiGlyphs) {
+        emojiGlyphs.push({
+          text: cluster, x: cursor, y, font: ctx.font, color,
+          bold: emphasizeEmoji, italic: run.italic, fontSize,
+          strike: run.strike,
+        });
+      }
+      cursor += emojiWidth;
+    }
+    drawOrdinaryText();
+  } else {
+    ctx.fillText(run.text, x, y);
+  }
   const metrics = ctx.measureText(run.text);
   const width = metrics.width;
   if (run.strike) {
@@ -415,7 +469,7 @@ export function wrapRichRuns(ctx, runs, maxWidth, baseSize, family) {
       }
       if (!piece) continue;
       let chunk = "";
-      for (const character of Array.from(piece)) {
+      for (const character of graphemes(piece)) {
         const candidate = chunk + character;
         const candidateWidth = measureRun(ctx, { ...run, text: candidate }, baseSize, family).width;
         if (lineWidth + candidateWidth > maxWidth && (chunk || line.length)) {
@@ -550,12 +604,12 @@ function cropAlphaBounds(canvas) {
       maxY = Math.max(maxY, y);
     }
   }
-  if (maxX < 0) return canvas;
+  if (maxX < 0) return { canvas, left: 0, top: 0 };
   const width = Math.max(1, maxX - minX + 1);
   const height = Math.max(1, maxY - minY + 1);
   const output = createCanvas(width, height);
   output.getContext("2d").drawImage(canvas, minX, minY, width, height, 0, 0, width, height);
-  return output;
+  return { canvas: output, left: minX, top: minY };
 }
 
 function hasDecoration(runs) {
@@ -689,7 +743,10 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const displayThemes = new Set(["neon", "gold", "glitch", "pixel", "stamp", "banner", "rainbow", "sticker", "speech"]);
   if (displayThemes.has(theme)) {
     runs.forEach((run) => {
-      if (!run.math && !run.code) run.bold = true;
+      if (!run.math && !run.code) {
+        run.emojiBold = run.bold;
+        run.bold = true;
+      }
     });
   }
 
@@ -728,16 +785,19 @@ export function drawRichWithTheme(ctx, value, options = {}) {
   const offscreen = createCanvas(Math.ceil(totalWidth + padding * 2), Math.ceil(totalHeight + padding * 2));
   const offscreenCtx = offscreen.getContext("2d");
   offscreenCtx.textBaseline = "middle";
+  const overlayEmojis = new Set(["gold", "neon", "rainbow"]).has(theme);
+  const emojiGlyphs = overlayEmojis ? [] : null;
   lines.forEach((line, lineIndex) => {
     let x = padding;
     if (mode === "center") x += (offscreen.width - padding * 2 - widths[lineIndex]) / 2;
     const y = padding + lineGap * lineIndex + lineGap / 2;
     line.forEach((run) => {
-      x += drawRun(offscreenCtx, run, x, y, baseSize, family, defaultColor);
+      x += drawRun(offscreenCtx, run, x, y, baseSize, family, defaultColor, emojiGlyphs);
     });
   });
 
-  const source = cropAlphaBounds(offscreen);
+  const cropped = cropAlphaBounds(offscreen);
+  const source = cropped.canvas;
   const x = mode === "center" ? Math.round(centerX - source.width / 2) : Math.round(centerX);
   const y = options.centerY != null
     ? Math.round(options.centerY - source.height / 2)
@@ -747,6 +807,29 @@ export function drawRichWithTheme(ctx, value, options = {}) {
     hasExplicitColors,
     effectScale: baseSize / requestedSize,
   });
+  if (emojiGlyphs?.length) {
+    ctx.save();
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    for (const glyph of emojiGlyphs) {
+      const glyphX = x + glyph.x - cropped.left;
+      const glyphY = y + glyph.y - cropped.top;
+      ctx.font = glyph.font;
+      ctx.fillStyle = glyph.color;
+      drawEmojiGlyph(ctx, glyph.text, glyphX, glyphY, glyph.bold, glyph.italic, glyph.fontSize);
+      if (glyph.strike) {
+        const metrics = ctx.measureText(glyph.text);
+        ctx.strokeStyle = glyph.color;
+        ctx.lineWidth = Math.max(2, baseSize * 0.055);
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(glyphX, glyphY + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2);
+        ctx.lineTo(glyphX + metrics.width, glyphY + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
   return {
     width: source.width,
     height: source.height,

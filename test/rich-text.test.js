@@ -58,6 +58,41 @@ test("rich text wrapping never replaces user text with an ellipsis", () => {
   assert.ok(!rendered.includes("…"));
 });
 
+test("Markdown styling keeps complete emoji graphemes and changes their rasterized appearance", () => {
+  const emoji = "👩🏽‍💻";
+  const runs = tokenizeRichText(`**${emoji}** *${emoji}* ~~${emoji}~~`);
+  assert.ok(runs.some((run) => run.text === emoji && run.bold));
+  assert.ok(runs.some((run) => run.text === emoji && run.italic));
+  assert.ok(runs.some((run) => run.text === emoji && run.strike));
+
+  const ctx = createCanvas(200, 200).getContext("2d");
+  const wrapped = wrapRichRuns(ctx, tokenizeRichText(`${emoji}${emoji}`), 1, 42, "Noto Color Emoji");
+  assert.deepEqual(wrapped.flat().map((run) => run.text), [emoji, emoji]);
+
+  const raster = (value) => {
+    const canvas = createCanvas(320, 180);
+    drawRichWithTheme(canvas.getContext("2d"), value, {
+      theme: "plain", mode: "center", cx: 160, centerY: 90,
+      fontSize: 72, maxWidth: 300, maxLines: 1, adaptive: false,
+    });
+    return canvas.getContext("2d").getImageData(0, 0, 320, 180).data;
+  };
+  const normal = raster(emoji);
+  for (const styled of [`**${emoji}**`, `*${emoji}*`, `~~${emoji}~~`]) {
+    assert.notDeepEqual(raster(styled), normal, `${styled} should visibly differ from unstyled emoji`);
+  }
+
+  const goldRaster = (value) => {
+    const canvas = createCanvas(320, 180);
+    drawRichWithTheme(canvas.getContext("2d"), value, {
+      theme: "gold", mode: "center", cx: 160, centerY: 90,
+      fontSize: 72, maxWidth: 300, maxLines: 1, adaptive: false,
+    });
+    return canvas.getContext("2d").getImageData(0, 0, 320, 180).data;
+  };
+  assert.notDeepEqual(goldRaster(`**${emoji}**`), goldRaster(emoji));
+});
+
 test("long non-post text scales down to keep about 200 characters in the composition", () => {
   const ctx = createCanvas(720, 420).getContext("2d");
   const layout = drawRichWithTheme(ctx, "長".repeat(200), {
