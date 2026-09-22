@@ -11,7 +11,7 @@ import {
 } from "lucide-static";
 import { COMMANDS } from "./commands.js";
 import { zeroMetrics } from "./post-data.js";
-import { drawRichWithTheme } from "./rich-text.js";
+import { drawRichWithTheme, tokenizeRichText } from "./rich-text.js";
 
 const WIDTH = 720;
 const HEIGHT = 420;
@@ -828,10 +828,22 @@ function drawPost(ctx, text, profile, post, avatarImage, timeZone) {
   });
 }
 
+const verticalSegmenter = new Intl.Segmenter("und", { granularity: "grapheme" });
+const verticalEmojiPattern = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
+
+export function verticalRichGlyphs(value) {
+  return tokenizeRichText(value).flatMap((run) => {
+    if (run.math) return [{ ...run, glyph: run.text }];
+    return Array.from(verticalSegmenter.segment(run.text), ({ segment }) => segment)
+      .filter((segment) => !/^\s+$/u.test(segment))
+      .map((glyph) => ({ ...run, glyph }));
+  });
+}
+
 function drawVertical(ctx, text, options = {}) {
   const requestedRows = options.maxRows || 7;
-  let chars = Array.from(plainText(text).replace(/\s/g, ""));
-  if (!chars.length) chars = [""];
+  let glyphs = verticalRichGlyphs(text);
+  if (!glyphs.length) glyphs = [{ glyph: "", size: 1 }];
   const requestedSize = options.fontSize || 43;
   const requestedRowGap = options.rowGap || 47;
   const requestedColumnGap = options.columnGap || 60;
@@ -843,8 +855,8 @@ function drawVertical(ctx, text, options = {}) {
     const scale = fontSize / requestedSize;
     const rowGap = requestedRowGap * scale;
     const columnGap = requestedColumnGap * scale;
-    const columns = Math.ceil(chars.length / rows);
-    const usedRows = Math.min(rows, chars.length);
+    const columns = Math.ceil(glyphs.length / rows);
+    const usedRows = Math.min(rows, glyphs.length);
     return {
       fontSize,
       rows,
@@ -884,7 +896,7 @@ function drawVertical(ctx, text, options = {}) {
   const centerX = options.centerX ?? WIDTH / 2;
   const centerY = options.centerY ?? HEIGHT / 2;
   const right = centerX + ((columns - 1) * columnGap) / 2;
-  const rows = Math.min(maxRows, chars.length);
+  const rows = Math.min(maxRows, glyphs.length);
   const top = centerY - ((rows - 1) * rowGap) / 2;
   const random = randomFor(options.seed || text);
   const columnOffsets = Array.from(
@@ -899,23 +911,51 @@ function drawVertical(ctx, text, options = {}) {
     ctx.shadowColor = options.shadowColor;
     ctx.shadowBlur = options.shadowBlur || 5;
   }
-  chars.forEach((char, index) => {
+  glyphs.forEach((glyph, index) => {
     const column = Math.floor(index / maxRows);
     const row = index % maxRows;
     const jitter = options.jitter || 0;
     const x = right - column * columnGap + (random() - 0.5) * jitter;
     const y = top + row * rowGap + columnOffsets[column] + (random() - 0.5) * jitter;
     const sizeJitter = options.sizeJitter || 0;
-    const glyphSize = fontSize * (1 + (random() - 0.5) * sizeJitter);
-    const rotation = verticalGlyphRotation(char) + (random() - 0.5) * (options.rotationJitter || 0);
+    const glyphSize = fontSize * (glyph.size || 1) * (1 + (random() - 0.5) * sizeJitter);
+    const rotation = verticalGlyphRotation(glyph.glyph) + (random() - 0.5) * (options.rotationJitter || 0);
     ctx.save();
+    ctx.fillStyle = glyph.color || options.color || "#111";
     ctx.translate(x, y);
     ctx.rotate(rotation);
-    ctx.font = `${options.weight || 600} ${glyphSize}px ${options.family || SERIF}`;
-    ctx.fillText(char, 0, 0);
+    if (glyph.math) {
+      ctx.restore();
+      drawRichWithTheme(ctx, `\\(${glyph.glyph}\\)`, {
+        theme: "plain", mode: "center", cx: x, centerY: y,
+        fontSize: Math.max(12, Math.round(fontSize * 0.65)),
+        maxWidth: Math.min(240, columnGap * 3), maxLines: 1,
+        adaptive: false, color: options.color || "#111",
+      });
+      return;
+    }
+    const emoji = verticalEmojiPattern.test(glyph.glyph);
+    const weight = glyph.bold ? Math.max(900, options.weight || 600) : options.weight || 600;
+    ctx.font = `${glyph.italic ? "italic " : ""}${weight} ${glyphSize}px ${glyph.code ? MONO : options.family || SERIF}`;
+    if (glyph.italic && emoji) ctx.transform(1, 0, -0.2, 1, 0, 0);
+    if (glyph.bold && emoji) {
+      const offset = Math.max(0.8, Math.round(glyphSize * 0.025));
+      for (const [dx, dy] of [[-offset, 0], [offset, 0], [0, -offset], [0, offset]]) {
+        ctx.fillText(glyph.glyph, dx, dy);
+      }
+    }
+    ctx.fillText(glyph.glyph, 0, 0);
+    if (glyph.strike) {
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = Math.max(1.5, glyphSize * 0.055);
+      ctx.beginPath();
+      ctx.moveTo(-glyphSize * 0.45, 0);
+      ctx.lineTo(glyphSize * 0.45, 0);
+      ctx.stroke();
+    }
     if (options.inkTexture) {
       ctx.globalAlpha = 0.16;
-      ctx.fillText(char, (random() - 0.5) * 1.2, (random() - 0.5) * 1.2);
+      ctx.fillText(glyph.glyph, (random() - 0.5) * 1.2, (random() - 0.5) * 1.2);
     }
     ctx.restore();
   });
@@ -940,7 +980,7 @@ function drawPoem(ctx, text) {
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   paperTexture(ctx, `poem:${text}`, { alpha: 0.022, specks: 760 });
-  const length = Array.from(plainText(text).replace(/\s/g, "")).length;
+  const length = verticalRichGlyphs(text).length;
   const short = length <= 30;
   const fontSize = 43;
   const maxRows = short

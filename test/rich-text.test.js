@@ -8,7 +8,7 @@ import {
   tokenizeRichText,
   wrapRichRuns,
 } from "../src/rich-text.js";
-import { RENDERER_FONT_STACKS, renderImage, verticalGlyphRotation } from "../src/renderer.js";
+import { RENDERER_FONT_STACKS, renderImage, verticalGlyphRotation, verticalRichGlyphs } from "../src/renderer.js";
 
 test("Markdown syntax becomes styled runs instead of visible punctuation", () => {
   const runs = tokenizeRichText("# 見出し\n**太字** *斜体* ~~取消~~ `code` [link](https://example.com)");
@@ -129,6 +129,27 @@ test("vertical prolonged sound marks rotate with the writing direction", () => {
   assert.equal(verticalGlyphRotation("ー"), Math.PI / 2);
   assert.equal(verticalGlyphRotation("ｰ"), Math.PI / 2);
   assert.equal(verticalGlyphRotation("あ"), 0);
+});
+
+test("vertical themes parse a Markdown heading around an emoji instead of drawing the #", async () => {
+  for (const heading of ["# 🪳", "#🪳"]) {
+    const glyphs = verticalRichGlyphs(heading);
+    assert.deepEqual(glyphs.map(({ glyph }) => glyph), ["🪳"]);
+    assert.equal(glyphs[0].bold, true);
+    assert.equal(glyphs[0].size, 1.25);
+  }
+  for (const commandId of ["impact", "poem"]) {
+    const png = await renderImage({ commandId, text: "# 🪳", profile: { handle: "@test" } });
+    assert.ok(png.length > 10_000);
+  }
+});
+
+test("vertical themes keep a styled joined emoji and KaTeX expression intact", () => {
+  const glyphs = verticalRichGlyphs("**👩🏽‍💻** *🚀* $E=mc^2$");
+  assert.deepEqual(glyphs.map(({ glyph }) => glyph), ["👩🏽‍💻", "🚀", "E=mc^2"]);
+  assert.equal(glyphs[0].bold, true);
+  assert.equal(glyphs[1].italic, true);
+  assert.equal(glyphs[2].math, true);
 });
 
 test("Linux mono fallbacks select Japanese text before the emoji font", () => {
